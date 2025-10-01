@@ -127,6 +127,11 @@
             background: rgba(255, 152, 0, 0.1);
         }
 
+        .status.warning {
+            border-left-color: #ffc107;
+            background: rgba(255, 193, 7, 0.1);
+        }
+
         .photo-preview {
             margin-top: 20px;
             text-align: center;
@@ -232,6 +237,28 @@
             animation: pulse 1s infinite;
         }
 
+        .sdk-status {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(51, 51, 51, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            border: 1px solid rgba(255, 110, 64, 0.5);
+        }
+
+        .sdk-status.connected {
+            border-color: #4caf50;
+            background: rgba(76, 175, 80, 0.2);
+        }
+
+        .sdk-status.demo {
+            border-color: #ffc107;
+            background: rgba(255, 193, 7, 0.2);
+        }
+
         @keyframes pulse {
             0%, 100% { opacity: 0.7; }
             50% { opacity: 1; }
@@ -249,6 +276,10 @@
     </style>
 </head>
 <body>
+    <div id="sdkStatus" class="sdk-status">
+        SDK lädt...
+    </div>
+
     <div class="app-container">
         <h1>📱 Receipt Scanner</h1>
         
@@ -264,7 +295,7 @@
         </div>
         
         <div id="status" class="status">
-            Bereit zum Scannen. Klicken Sie auf "Beleg scannen" oder drücken Sie die PTT-Taste.
+            SDK wird geladen...
         </div>
         
         <div id="photoPreview" class="photo-preview" style="display: none;">
@@ -278,7 +309,160 @@
         PTT Aktiv
     </div>
 
+    <!-- Rabbit R1 SDK -->
     <script>
+        // Mock Rabbit SDK für Entwicklung/Test
+        class MockRabbitSDK {
+            constructor() {
+                this.camera = {
+                    is_active: false,
+                    
+                    async start(options = {}) {
+                        console.log('Mock: Camera start', options);
+                        this.is_active = true;
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        return { success: true };
+                    },
+                    
+                    async stop() {
+                        console.log('Mock: Camera stop');
+                        this.is_active = false;
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        return { success: true };
+                    },
+                    
+                    async takePhoto(options = {}) {
+                        console.log('Mock: Take photo', options);
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
+                        // Mock Base64 encoded sample receipt image (1x1 pixel)
+                        return '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A8A';
+                    }
+                };
+                
+                this.ai = {
+                    async ocr(photo, options = {}) {
+                        console.log('Mock: OCR', options);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        return `
+                        EDEKA Muster
+                        Musterstraße 123
+                        12345 Musterdorf
+                        
+                        Kassenbons
+                        ================
+                        
+                        Brot                    2,99 EUR
+                        Milch 1L               1,49 EUR  
+                        Butter                 2,79 EUR
+                        Äpfel 1kg              3,99 EUR
+                        Toilettenpapier        4,99 EUR
+                        
+                        ================
+                        SUMME                 16,25 EUR
+                        Gegeben               20,00 EUR
+                        Rückgeld               3,75 EUR
+                        
+                        Vielen Dank für Ihren Einkauf!
+                        `;
+                    },
+                    
+                    async chat(prompt, options = {}) {
+                        console.log('Mock: AI Chat', { prompt: prompt.substring(0, 100) + '...', options });
+                        await new Promise(resolve => setTimeout(resolve, 3000));
+                        
+                        return `{
+                            "total": "16.25",
+                            "currency": "EUR",
+                            "items": ["Brot", "Milch 1L", "Butter", "Äpfel 1kg", "Toilettenpapier"],
+                            "merchant": "EDEKA Muster",
+                            "date": "2024-10-01",
+                            "confidence": "high"
+                        }`;
+                    }
+                };
+                
+                this.email = {
+                    async send(emailData) {
+                        console.log('Mock: Email send', emailData);
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        return { success: true, messageId: 'mock-' + Date.now() };
+                    }
+                };
+            }
+            
+            onPTTPress(callback) {
+                this.pttPressCallback = callback;
+            }
+            
+            onPTTRelease(callback) {
+                this.pttReleaseCallback = callback;
+            }
+        }
+
+        // SDK Initialization
+        let rabbit;
+        let isR1Device = false;
+        let sdkLoaded = false;
+
+        async function initializeSDK() {
+            const sdkStatus = document.getElementById('sdkStatus');
+            
+            try {
+                // Prüfe ob wir auf einem echten R1 Device sind
+                if (typeof window.rabbit !== 'undefined') {
+                    rabbit = window.rabbit;
+                    isR1Device = true;
+                    sdkStatus.textContent = 'R1 SDK Verbunden';
+                    sdkStatus.classList.add('connected');
+                } else if (typeof require !== 'undefined') {
+                    // Node.js Umgebung (falls r1-create SDK verwendet wird)
+                    try {
+                        const r1 = require('r1-create');
+                        rabbit = r1;
+                        isR1Device = true;
+                        sdkStatus.textContent = 'R1 SDK (Node) Verbunden';
+                        sdkStatus.classList.add('connected');
+                    } catch (requireError) {
+                        throw new Error('r1-create SDK nicht gefunden');
+                    }
+                } else {
+                    // Fallback auf Mock SDK
+                    rabbit = new MockRabbitSDK();
+                    isR1Device = false;
+                    sdkStatus.textContent = 'Demo Modus';
+                    sdkStatus.classList.add('demo');
+                    
+                    // Simuliere PTT Events für Demo
+                    document.addEventListener('keydown', (e) => {
+                        if (e.code === 'Space' && rabbit.pttPressCallback) {
+                            e.preventDefault();
+                            rabbit.pttPressCallback();
+                        }
+                    });
+                    
+                    document.addEventListener('keyup', (e) => {
+                        if (e.code === 'Space' && rabbit.pttReleaseCallback) {
+                            e.preventDefault();
+                            rabbit.pttReleaseCallback();
+                        }
+                    });
+                }
+                
+                sdkLoaded = true;
+                console.log('SDK initialized:', isR1Device ? 'Real R1 Device' : 'Demo Mode');
+                
+            } catch (error) {
+                console.error('SDK initialization error:', error);
+                rabbit = new MockRabbitSDK();
+                isR1Device = false;
+                sdkStatus.textContent = 'Demo Modus (Fehler)';
+                sdkStatus.classList.add('demo');
+                sdkLoaded = true;
+            }
+        }
+
         class ReceiptScannerR1 {
             constructor() {
                 this.ui = {
@@ -291,7 +475,8 @@
                     results: document.getElementById('results'),
                     pttIndicator: document.getElementById('pttIndicator'),
                     loadingSpinner: document.querySelector('.loading-spinner'),
-                    buttonText: document.querySelector('.button-text')
+                    buttonText: document.querySelector('.button-text'),
+                    sdkStatus: document.getElementById('sdkStatus')
                 };
                 
                 this.currentPhoto = null;
@@ -301,16 +486,25 @@
                 this.init();
             }
 
-            init() {
+            async init() {
+                // Warte auf SDK Initialisierung
+                while (!sdkLoaded) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                this.updateStatus(isR1Device ? 'Bereit zum Scannen auf R1 Device!' : 'Demo-Modus aktiv. Drücken Sie Leertaste für PTT-Simulation.', 'success');
+                
                 this.ui.scanButton.addEventListener('click', () => this.startFullScanProcess());
                 this.ui.previewButton.addEventListener('click', () => this.togglePreview());
                 this.ui.manualCaptureButton.addEventListener('click', () => this.capturePhoto());
                 this.ui.retakeButton.addEventListener('click', () => this.reset());
                 
                 // PTT Button Integration
-                if (typeof rabbit !== 'undefined') {
-                    rabbit.onPTTPress = () => this.handlePTTPress();
-                    rabbit.onPTTRelease = () => this.handlePTTRelease();
+                if (rabbit.onPTTPress) {
+                    rabbit.onPTTPress(() => this.handlePTTPress());
+                }
+                if (rabbit.onPTTRelease) {
+                    rabbit.onPTTRelease(() => this.handlePTTRelease());
                 }
             }
 
@@ -432,8 +626,7 @@
                 this.ui.retakeButton.style.display = 'none';
 
                 try {
-                    // Enhanced Camera Control mit besseren Parametern
-                    this.updateStatus('Starte Kamera mit optimierten Einstellungen...', 'processing');
+                    this.updateStatus('Starte Kamera...', 'processing');
                     await rabbit.camera.start({ 
                         quality: 'high', 
                         focusMode: 'auto',
@@ -446,22 +639,19 @@
                     this.updateStatus('Foto wird aufgenommen...', 'processing');
                     const photo = await rabbit.camera.takePhoto({ 
                         quality: 'high', 
-                        format: 'jpeg',
-                        optimize: true 
+                        format: 'jpeg'
                     });
                     
                     this.currentPhoto = photo;
                     this.displayPhoto(photo);
 
                     await rabbit.camera.stop();
-
                     await this.processPhoto(photo);
 
                 } catch (error) {
                     console.error('Full scan process error:', error);
                     this.updateStatus('Fehler beim Scannen: ' + error.message, 'error');
                     
-                    // Cleanup bei Fehlern
                     try {
                         if (rabbit.camera.is_active) {
                             await rabbit.camera.stop();
@@ -483,7 +673,6 @@
 
             async processPhoto(photo) {
                 try {
-                    // OCR Verarbeitung mit erweiterten Parametern
                     this.updateStatus('Führe OCR-Texterkennung durch...', 'processing');
                     const rawText = await rabbit.ai.ocr(photo, {
                         language: 'deu+eng',
@@ -495,7 +684,6 @@
                         throw new Error('Kein Text auf dem Beleg erkannt. Bitte versuchen Sie es erneut mit besserer Beleuchtung.');
                     }
 
-                    // KI-Analyse mit erweitertem Prompt
                     this.updateStatus('Analysiere Beleg-Daten mit KI...', 'processing');
                     const enhancedPrompt = `
                         Analysiere diesen Kassenbon-Text und extrahiere strukturierte Daten.
@@ -525,7 +713,6 @@
 
                     let parsedData;
                     try {
-                        // JSON-Extraktion mit besserer Fehlerbehandlung
                         const jsonMatch = analysisResult.match(/\{[\s\S]*\}/);
                         if (jsonMatch) {
                             parsedData = JSON.parse(jsonMatch[0]);
@@ -548,7 +735,7 @@
 
             displayResults(data, rawText) {
                 const resultsHTML = `
-                    <h3>📊 Scan-Ergebnisse</h3>
+                    <h3>📊 Scan-Ergebnisse${!isR1Device ? ' (Demo)' : ''}</h3>
                     <div class="total">💰 Gesamt: ${data.total || 'Nicht erkannt'} ${data.currency || 'EUR'}</div>
                     ${data.merchant ? `<p><strong>🏪 Geschäft:</strong> ${data.merchant}</p>` : ''}
                     ${data.date ? `<p><strong>📅 Datum:</strong> ${data.date}</p>` : ''}
@@ -576,12 +763,13 @@
                 try {
                     this.updateStatus('Sende E-Mail mit Scan-Ergebnissen...', 'processing');
                     
-                    const emailSubject = `📱 Receipt Scan - ${new Date().toLocaleDateString('de-DE')} - ${data.total || 'Unbekannt'} ${data.currency || 'EUR'}`;
+                    const emailSubject = `📱 Receipt Scan${!isR1Device ? ' (Demo)' : ''} - ${new Date().toLocaleDateString('de-DE')} - ${data.total || 'Unbekannt'} ${data.currency || 'EUR'}`;
                     
                     const emailBody = `
                         Hallo!
 
                         Hier sind die Ergebnisse Ihres Beleg-Scans vom ${new Date().toLocaleString('de-DE')}:
+                        ${!isR1Device ? '\n🔧 DEMO-MODUS - Simulierte Daten' : ''}
 
                         💰 GESAMTBETRAG: ${data.total || 'Nicht erkannt'} ${data.currency || 'EUR'}
                         🏪 GESCHÄFT: ${data.merchant || 'Nicht erkannt'}
@@ -598,7 +786,8 @@
                         ${rawText}
 
                         ---
-                        Generiert von Receipt Scanner R1
+                        Generiert von Receipt Scanner R1${!isR1Device ? ' (Demo-Modus)' : ''}
+                        SDK Status: ${isR1Device ? 'R1 Device' : 'Mock SDK'}
                         Zeitstempel: ${new Date().toISOString()}
                     `;
 
@@ -613,11 +802,11 @@
                         }]
                     });
 
-                    this.updateStatus('✅ Scan abgeschlossen! E-Mail wurde gesendet.', 'success');
+                    this.updateStatus(`✅ Scan abgeschlossen! E-Mail wurde ${!isR1Device ? '(simuliert) ' : ''}gesendet.`, 'success');
 
                 } catch (error) {
                     console.error('Email sending error:', error);
-                    this.updateStatus('⚠️ Scan abgeschlossen, aber E-Mail-Versand fehlgeschlagen: ' + error.message, 'error');
+                    this.updateStatus(`⚠️ Scan abgeschlossen, aber E-Mail-Versand fehlgeschlagen: ${error.message}`, 'warning');
                 }
             }
 
@@ -626,9 +815,8 @@
                 this.ui.photoPreview.style.display = 'none';
                 this.ui.results.style.display = 'none';
                 this.ui.retakeButton.style.display = 'none';
-                this.updateStatus('Bereit für neuen Scan.', 'info');
+                this.updateStatus(isR1Device ? 'Bereit für neuen Scan.' : 'Demo-Modus: Bereit für neuen Scan. (Leertaste = PTT)', 'info');
                 
-                // Stoppe Vorschau falls aktiv
                 if (this.previewMode) {
                     this.stopPreview();
                 }
@@ -636,7 +824,8 @@
         }
 
         // App Initialisierung
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initializeSDK();
             new ReceiptScannerR1();
         });
 
