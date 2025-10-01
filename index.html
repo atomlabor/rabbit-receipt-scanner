@@ -103,6 +103,7 @@
         .status.success { border-left-color: #4caf50; }
         .status.error { border-left-color: #f44336; }
         .status.processing { border-left-color: #ff9800; }
+        .status.warning { border-left-color: #ffc107; }
 
         .photo-container {
             margin-bottom: 15px;
@@ -200,11 +201,43 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .sdk-status {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(51, 51, 51, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            border: 1px solid rgba(255, 110, 64, 0.3);
+        }
+
+        .sdk-status.r1 { border-color: #4caf50; background: rgba(76, 175, 80, 0.2); }
+        .sdk-status.demo { border-color: #ffc107; background: rgba(255, 193, 7, 0.2); }
+        .sdk-status.error { border-color: #f44336; background: rgba(244, 67, 54, 0.2); }
+
+        .dev-info {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid #ffc107;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 11px;
+            line-height: 1.3;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🐰 Receipt Scanner</h1>
+        
+        <div id="devInfo" class="dev-info" style="display: none;">
+            <strong>🔧 Entwicklungsmodus</strong><br>
+            Leertaste = PTT-Taste<br>
+            Demo-Daten werden simuliert
+        </div>
         
         <button id="scanBtn" class="main-button">
             Beleg scannen
@@ -217,7 +250,7 @@
         </div>
         
         <div id="status" class="status">
-            R1 Kamera wird initialisiert...
+            SDK wird geladen...
         </div>
         
         <div id="photoContainer" class="photo-container">
@@ -233,9 +266,170 @@
     </div>
     
     <div id="pttIndicator" class="ptt-indicator">PTT</div>
+    <div id="sdkStatus" class="sdk-status">SDK...</div>
 
     <script>
-        class RealReceiptScanner {
+        // Globale SDK-Variablen
+        let rabbit = null;
+        let isDemoMode = false;
+        let sdkReady = false;
+
+        // Mock SDK für Entwicklung/Test
+        const createMockSDK = () => ({
+            camera: {
+                is_active: false,
+                async start(options = {}) {
+                    console.log('Mock: Camera start', options);
+                    this.is_active = true;
+                    await new Promise(r => setTimeout(r, 500));
+                    return { success: true };
+                },
+                async stop() {
+                    console.log('Mock: Camera stop');
+                    this.is_active = false;
+                    await new Promise(r => setTimeout(r, 200));
+                    return { success: true };
+                },
+                async takePhoto(options = {}) {
+                    console.log('Mock: Take photo', options);
+                    await new Promise(r => setTimeout(r, 1000));
+                    
+                    // Erstelle ein kleines Demo-Bild
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 300;
+                    canvas.height = 400;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Weißer Hintergrund
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, 300, 400);
+                    
+                    // Demo-Kassenbon
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '14px monospace';
+                    ctx.fillText('REWE Markt', 20, 40);
+                    ctx.fillText('Musterstraße 123', 20, 60);
+                    ctx.fillText('12345 Musterdorf', 20, 80);
+                    ctx.fillText('', 20, 100);
+                    ctx.fillText('Kassenbon', 20, 130);
+                    ctx.fillText('=================', 20, 150);
+                    ctx.fillText('Brot              2,99€', 20, 180);
+                    ctx.fillText('Milch 1L          1,49€', 20, 200);
+                    ctx.fillText('Butter            2,79€', 20, 220);
+                    ctx.fillText('Äpfel 1kg         3,99€', 20, 240);
+                    ctx.fillText('Bananen           2,29€', 20, 260);
+                    ctx.fillText('=================', 20, 280);
+                    ctx.fillText('SUMME            13,55€', 20, 310);
+                    ctx.fillText('Bar              15,00€', 20, 330);
+                    ctx.fillText('Rückgeld          1,45€', 20, 350);
+                    ctx.fillText('Vielen Dank!', 20, 380);
+                    
+                    return canvas.toDataURL('image/jpeg', 0.8);
+                }
+            },
+            
+            ai: {
+                async ocr(photoData, options = {}) {
+                    console.log('Mock: OCR', options);
+                    await new Promise(r => setTimeout(r, 2000));
+                    
+                    return `REWE Markt
+Musterstraße 123
+12345 Musterdorf
+
+Kassenbon
+=================
+Brot              2,99€
+Milch 1L          1,49€
+Butter            2,79€
+Äpfel 1kg         3,99€
+Bananen           2,29€
+=================
+SUMME            13,55€
+Bar              15,00€
+Rückgeld          1,45€
+Vielen Dank!`;
+                },
+                
+                async chat(prompt, options = {}) {
+                    console.log('Mock: AI Chat');
+                    await new Promise(r => setTimeout(r, 3000));
+                    
+                    return {
+                        text: `{
+                            "total": "13.55",
+                            "currency": "EUR", 
+                            "items": ["Brot", "Milch 1L", "Butter", "Äpfel 1kg", "Bananen"],
+                            "store": "REWE Markt",
+                            "date": "${new Date().toISOString().split('T')[0]}",
+                            "confidence": "high"
+                        }`
+                    };
+                },
+                
+                async query(prompt) {
+                    return await this.chat(prompt);
+                }
+            },
+            
+            email: {
+                async send(emailData) {
+                    console.log('Mock: Email send', emailData);
+                    await new Promise(r => setTimeout(r, 1500));
+                    return { success: true, messageId: 'demo-' + Date.now() };
+                }
+            }
+        });
+
+        // SDK Initialisierung
+        async function initializeSDK() {
+            const sdkStatus = document.getElementById('sdkStatus');
+            const devInfo = document.getElementById('devInfo');
+            
+            try {
+                // Warte kurz für mögliche asynchrone SDK-Loads
+                await new Promise(r => setTimeout(r, 500));
+                
+                // Prüfe verschiedene mögliche SDK-Objekte
+                if (typeof window.rabbit !== 'undefined') {
+                    rabbit = window.rabbit;
+                    sdkStatus.textContent = 'R1 SDK ✓';
+                    sdkStatus.classList.add('r1');
+                } else if (typeof globalThis.rabbit !== 'undefined') {
+                    rabbit = globalThis.rabbit;
+                    sdkStatus.textContent = 'R1 SDK ✓';
+                    sdkStatus.classList.add('r1');
+                } else if (typeof window.R1 !== 'undefined') {
+                    rabbit = window.R1;
+                    sdkStatus.textContent = 'R1 SDK ✓';
+                    sdkStatus.classList.add('r1');
+                } else {
+                    // Fallback auf Mock SDK
+                    rabbit = createMockSDK();
+                    isDemoMode = true;
+                    sdkStatus.textContent = 'Demo Modus';
+                    sdkStatus.classList.add('demo');
+                    devInfo.style.display = 'block';
+                    
+                    console.warn('🔧 R1 SDK nicht verfügbar - Demo-Modus aktiviert');
+                }
+                
+                sdkReady = true;
+                return true;
+                
+            } catch (error) {
+                console.error('SDK Initialisierung fehlgeschlagen:', error);
+                rabbit = createMockSDK();
+                isDemoMode = true;
+                sdkStatus.textContent = 'Demo (Fehler)';
+                sdkStatus.classList.add('error');
+                devInfo.style.display = 'block';
+                sdkReady = true;
+                return false;
+            }
+        }
+
+        class ReceiptScanner {
             constructor() {
                 this.elements = {
                     scanBtn: document.getElementById('scanBtn'),
@@ -259,9 +453,18 @@
                 this.init();
             }
 
-            init() {
+            async init() {
+                // Warte auf SDK
+                await initializeSDK();
+                
                 this.setupEventListeners();
-                this.initializeR1SDK();
+                this.setupPTTHandlers();
+                
+                if (isDemoMode) {
+                    this.updateStatus('🔧 Demo-Modus bereit - Leertaste für PTT', 'warning');
+                } else {
+                    this.updateStatus('✅ R1 bereit - Kamera verfügbar', 'success');
+                }
             }
 
             setupEventListeners() {
@@ -271,36 +474,36 @@
                 this.elements.retakeBtn.addEventListener('click', () => this.reset());
             }
 
-            async initializeR1SDK() {
-                try {
-                    // Prüfe R1 SDK Verfügbarkeit
-                    if (typeof rabbit === 'undefined') {
-                        throw new Error('Rabbit R1 SDK nicht verfügbar');
+            setupPTTHandlers() {
+                if (!isDemoMode) {
+                    // Echte PTT Events
+                    try {
+                        if (rabbit.onPTTPress) {
+                            rabbit.onPTTPress(() => this.handlePTTPress());
+                            rabbit.onPTTRelease(() => this.handlePTTRelease());
+                        } else if (rabbit.device?.onPTTPress) {
+                            rabbit.device.onPTTPress(() => this.handlePTTPress());
+                            rabbit.device.onPTTRelease(() => this.handlePTTRelease());
+                        }
+                    } catch (error) {
+                        console.warn('PTT Setup Fehler:', error);
                     }
-
-                    // Prüfe Kamera-API
-                    if (!rabbit.camera) {
-                        throw new Error('Kamera-API nicht verfügbar');
-                    }
-
-                    // PTT Button Setup - verschiedene mögliche API Varianten
-                    if (rabbit.onPTTPress) {
-                        rabbit.onPTTPress(() => this.handlePTTPress());
-                        rabbit.onPTTRelease(() => this.handlePTTRelease());
-                    } else if (rabbit.device && rabbit.device.onPTTPress) {
-                        rabbit.device.onPTTPress(() => this.handlePTTPress());
-                        rabbit.device.onPTTRelease(() => this.handlePTTRelease());
-                    } else if (rabbit.input) {
-                        rabbit.input.onPTTPress(() => this.handlePTTPress());
-                        rabbit.input.onPTTRelease(() => this.handlePTTRelease());
-                    }
-
-                    this.updateStatus('R1 bereit - Kamera verfügbar', 'success');
-                    
-                } catch (error) {
-                    console.error('R1 SDK Initialisierung fehlgeschlagen:', error);
-                    this.updateStatus('❌ R1 SDK Fehler: ' + error.message, 'error');
                 }
+                
+                // Demo-Modus: Leertaste als PTT
+                document.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space' && !this.isProcessing) {
+                        e.preventDefault();
+                        this.handlePTTPress();
+                    }
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                        this.handlePTTRelease();
+                    }
+                });
             }
 
             updateStatus(message, type = 'info') {
@@ -308,11 +511,13 @@
                 this.elements.status.className = `status ${type}`;
             }
 
-            setButtonState(btn, disabled, loading = false, text = null) {
-                btn.disabled = disabled;
-                if (text) btn.textContent = text;
+            setButtonLoading(btn, loading = false, text = null) {
                 if (loading) {
-                    btn.innerHTML = `<span class="loading"></span> ${text || btn.textContent}`;
+                    btn.innerHTML = `<span class="loading"></span> ${text || 'Lädt...'}`;
+                    btn.disabled = true;
+                } else {
+                    btn.textContent = text || btn.getAttribute('data-text') || 'Button';
+                    btn.disabled = false;
                 }
             }
 
@@ -329,6 +534,7 @@
                     }
                 } catch (error) {
                     console.error('PTT Handler Fehler:', error);
+                    this.updateStatus('PTT Fehler: ' + error.message, 'error');
                 }
             }
 
@@ -337,10 +543,7 @@
             }
 
             isCameraActive() {
-                // Verschiedene mögliche API-Varianten prüfen
-                return rabbit.camera.is_active || 
-                       rabbit.camera.isActive || 
-                       (rabbit.camera.status && rabbit.camera.status === 'active');
+                return rabbit?.camera?.is_active || false;
             }
 
             async togglePreview() {
@@ -358,14 +561,12 @@
 
             async startPreview() {
                 this.updateStatus('Starte Kamera-Vorschau...', 'processing');
-                this.setButtonState(this.elements.previewBtn, true, true);
+                this.setButtonLoading(this.elements.previewBtn, true, 'Startet...');
 
                 try {
                     await rabbit.camera.start({
                         mode: 'preview',
-                        quality: 'medium',
-                        autoFocus: true,
-                        exposure: 'auto'
+                        quality: 'medium'
                     });
 
                     this.previewActive = true;
@@ -378,6 +579,7 @@
                 } catch (error) {
                     console.error('Kamera Start Fehler:', error);
                     this.updateStatus('Kamera Fehler: ' + error.message, 'error');
+                    this.elements.previewBtn.textContent = 'Vorschau';
                     this.elements.previewBtn.disabled = false;
                     this.previewActive = false;
                 }
@@ -402,13 +604,13 @@
             }
 
             async capturePhoto() {
-                if (!this.isCameraActive()) {
+                if (!this.isCameraActive() && !isDemoMode) {
                     this.updateStatus('Kamera nicht aktiv!', 'error');
                     return;
                 }
 
                 this.updateStatus('Foto wird aufgenommen...', 'processing');
-                this.setButtonState(this.elements.captureBtn, true, true);
+                this.setButtonLoading(this.elements.captureBtn, true, 'Aufnahme...');
 
                 try {
                     const photo = await rabbit.camera.takePhoto({
@@ -420,9 +622,9 @@
                     this.currentPhoto = photo;
                     await this.stopPreview();
                     
-                    // Foto anzeigen - verschiedene mögliche Datenformate
-                    const photoData = photo.dataUrl || photo.data || photo.base64 || photo;
-                    this.elements.photoDisplay.src = photoData.startsWith('data:') ? photoData : `data:image/jpeg;base64,${photoData}`;
+                    // Foto anzeigen
+                    const photoSrc = photo.startsWith('data:') ? photo : `data:image/jpeg;base64,${photo}`;
+                    this.elements.photoDisplay.src = photoSrc;
                     this.elements.photoContainer.style.display = 'block';
                     
                     this.updateStatus('Foto aufgenommen - Starte Analyse...', 'processing');
@@ -431,6 +633,8 @@
                 } catch (error) {
                     console.error('Foto Aufnahme Fehler:', error);
                     this.updateStatus('Foto Fehler: ' + error.message, 'error');
+                } finally {
+                    this.elements.captureBtn.textContent = 'Auslösen';
                     this.elements.captureBtn.disabled = false;
                 }
             }
@@ -439,160 +643,102 @@
                 if (this.isProcessing) return;
                 
                 this.isProcessing = true;
-                this.setButtonState(this.elements.scanBtn, true, true, 'Scanne...');
+                this.setButtonLoading(this.elements.scanBtn, true, 'Scanne...');
                 this.hideResults();
 
                 try {
                     // Kamera starten
-                    this.updateStatus('Starte R1 Kamera...', 'processing');
+                    this.updateStatus('Starte Kamera...', 'processing');
                     await rabbit.camera.start({
-                        mode: 'capture',
                         quality: 'high',
-                        autoFocus: true,
-                        exposure: 'auto',
-                        stabilization: true
+                        autoFocus: true
                     });
 
-                    // Warten für Stabilisierung
-                    this.updateStatus('Kamera stabilisiert... 3 Sek.', 'processing');
-                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    // Stabilisierung
+                    this.updateStatus('Kamera stabilisiert... 2 Sek.', 'processing');
+                    await new Promise(r => setTimeout(r, 2000));
 
                     // Foto aufnehmen
                     this.updateStatus('Nehme Foto auf...', 'processing');
                     const photo = await rabbit.camera.takePhoto({
                         quality: 'high',
-                        format: 'jpeg',
-                        compression: 0.9,
-                        optimize: true
+                        format: 'jpeg'
                     });
 
                     this.currentPhoto = photo;
-                    
-                    // Kamera stoppen
                     await rabbit.camera.stop();
 
                     // Foto anzeigen
-                    const photoData = photo.dataUrl || photo.data || photo.base64 || photo;
-                    this.elements.photoDisplay.src = photoData.startsWith('data:') ? photoData : `data:image/jpeg;base64,${photoData}`;
+                    const photoSrc = photo.startsWith('data:') ? photo : `data:image/jpeg;base64,${photo}`;
+                    this.elements.photoDisplay.src = photoSrc;
                     this.elements.photoContainer.style.display = 'block';
 
-                    // Verarbeitung starten
+                    // Verarbeitung
                     await this.processPhoto();
 
                 } catch (error) {
                     console.error('Vollscan Fehler:', error);
                     this.updateStatus('Scan Fehler: ' + error.message, 'error');
-                    
-                    // Cleanup
-                    try {
-                        if (this.isCameraActive()) {
-                            await rabbit.camera.stop();
-                        }
-                    } catch (cleanupError) {
-                        console.error('Cleanup Fehler:', cleanupError);
-                    }
-                    
                 } finally {
                     this.isProcessing = false;
-                    this.elements.scanBtn.disabled = false;
                     this.elements.scanBtn.textContent = 'Beleg scannen';
+                    this.elements.scanBtn.disabled = false;
                     this.elements.retakeBtn.style.display = 'inline-block';
                 }
             }
 
             async processPhoto() {
                 try {
-                    // OCR Durchführung
-                    this.updateStatus('OCR Texterkennung läuft...', 'processing');
-                    
-                    // Extrahiere Foto-Daten in verschiedenen möglichen Formaten
-                    const photoData = this.currentPhoto.data || this.currentPhoto.base64 || this.currentPhoto.dataUrl || this.currentPhoto;
-                    
-                    const ocrResult = await rabbit.ai.ocr(photoData, {
-                        language: ['deu', 'eng'],
-                        enhance: true,
-                        deskew: true,
-                        removeNoise: true
-                    });
-
-                    const rawText = ocrResult.text || ocrResult;
+                    // OCR
+                    this.updateStatus('OCR läuft...', 'processing');
+                    const rawText = await rabbit.ai.ocr(this.currentPhoto);
                     
                     if (!rawText || rawText.trim().length === 0) {
-                        throw new Error('Kein Text erkannt. Bitte bessere Beleuchtung verwenden.');
+                        throw new Error('Kein Text erkannt');
                     }
 
                     // KI Analyse
-                    this.updateStatus('KI analysiert Beleg...', 'processing');
+                    this.updateStatus('KI analysiert...', 'processing');
+                    const prompt = `Analysiere diesen Kassenbeleg und extrahiere JSON:
+{
+  "total": "XX.XX",
+  "currency": "EUR", 
+  "items": ["artikel1", "artikel2", "artikel3"],
+  "store": "geschäft",
+  "date": "YYYY-MM-DD",
+  "confidence": "high|medium|low"
+}
+
+Text: "${rawText}"`;
+
+                    const aiResponse = await (rabbit.ai.chat ? 
+                        rabbit.ai.chat(prompt, { temperature: 0.1 }) : 
+                        rabbit.ai.query(prompt));
                     
-                    const analysisPrompt = `
-                        Analysiere diesen deutschen Kassenbeleg und extrahiere die Daten.
-                        Antworte NUR mit gültigem JSON:
-                        
-                        {
-                            "total": "XX.XX",
-                            "currency": "EUR",
-                            "items": ["artikel1", "artikel2", "artikel3", "artikel4", "artikel5"],
-                            "store": "geschäftsname",
-                            "date": "YYYY-MM-DD",
-                            "confidence": "high|medium|low"
-                        }
-                        
-                        Regeln:
-                        - Suche Gesamtbetrag (SUMME, TOTAL, GESAMT, etc.)
-                        - Max. 5 Hauptartikel extrahieren
-                        - Deutsche Beträge verwenden Komma als Dezimaltrennzeichen
-                        - Standard-Währung: EUR
-                        
-                        Text: "${rawText}"
-                    `;
-
-                    // Verschiedene mögliche AI API Varianten
-                    let aiResponse;
-                    if (rabbit.ai.chat) {
-                        aiResponse = await rabbit.ai.chat(analysisPrompt, {
-                            model: 'gpt-4',
-                            temperature: 0.1,
-                            maxTokens: 500
-                        });
-                    } else if (rabbit.ai.query) {
-                        aiResponse = await rabbit.ai.query(analysisPrompt);
-                    } else {
-                        throw new Error('AI API nicht verfügbar');
-                    }
-
-                    const responseText = aiResponse.text || aiResponse.content || aiResponse;
-
-                    // JSON Parsing
-                    let analysisData;
-                    try {
-                        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-                        if (jsonMatch) {
-                            analysisData = JSON.parse(jsonMatch[0]);
-                        } else {
-                            throw new Error('Kein JSON in KI-Antwort');
-                        }
-                    } catch (parseError) {
-                        console.error('JSON Parse Fehler:', parseError);
-                        throw new Error('KI-Analyse Parsing fehlgeschlagen');
-                    }
-
-                    // Ergebnisse anzeigen
-                    this.displayResults(analysisData, rawText);
+                    const responseText = aiResponse.text || aiResponse;
                     
-                    // E-Mail versenden
-                    await this.sendResultEmail(analysisData, rawText);
+                    // JSON parsen
+                    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+                    const data = jsonMatch ? JSON.parse(jsonMatch[0]) : {
+                        total: 'Unbekannt',
+                        currency: 'EUR',
+                        items: [],
+                        store: 'Unbekannt',
+                        confidence: 'low'
+                    };
+
+                    this.displayResults(data, rawText);
+                    await this.sendEmail(data, rawText);
 
                 } catch (error) {
-                    console.error('Verarbeitungsfehler:', error);
+                    console.error('Verarbeitung Fehler:', error);
                     this.updateStatus('Verarbeitung fehlgeschlagen: ' + error.message, 'error');
                 }
             }
 
             displayResults(data, rawText) {
-                // Gesamtbetrag
-                this.elements.totalAmount.textContent = `💰 ${data.total || 'Unbekannt'} ${data.currency || 'EUR'}`;
+                this.elements.totalAmount.textContent = `💰 ${data.total} ${data.currency}`;
                 
-                // Artikel Liste
                 const itemsHtml = data.items && data.items.length > 0 
                     ? data.items.map(item => `<div>• ${item}</div>`).join('')
                     : '<div>Keine Artikel erkannt</div>';
@@ -600,65 +746,50 @@
                 this.elements.itemsList.innerHTML = `
                     ${data.store ? `<div><strong>🏪 ${data.store}</strong></div>` : ''}
                     ${data.date ? `<div>📅 ${data.date}</div>` : ''}
-                    ${data.confidence ? `<div>🎯 Vertrauen: ${data.confidence}</div>` : ''}
+                    ${data.confidence ? `<div>🎯 ${data.confidence}</div>` : ''}
                     <div style="margin: 8px 0; font-weight: bold;">🛒 Artikel:</div>
                     ${itemsHtml}
                 `;
                 
-                // Rohtext
                 this.elements.rawText.textContent = rawText;
-                
-                // Ergebnisse anzeigen
                 this.elements.results.style.display = 'block';
                 
                 this.updateStatus('✅ Analyse abgeschlossen!', 'success');
             }
 
-            async sendResultEmail(data, rawText) {
+            async sendEmail(data, rawText) {
                 try {
                     this.updateStatus('E-Mail wird gesendet...', 'processing');
                     
-                    const emailSubject = `📱 Receipt Scan - ${data.total || 'Unbekannt'} ${data.currency || 'EUR'} - ${new Date().toLocaleDateString('de-DE')}`;
-                    
-                    const emailBody = `
-Hallo!
+                    const subject = `📱 Receipt Scan${isDemoMode ? ' (Demo)' : ''} - ${data.total} ${data.currency}`;
+                    const body = `Kassenbeleg-Scan${isDemoMode ? ' (Demo-Daten)' : ''}:
 
-Hier ist Ihr Kassenbeleg-Scan vom ${new Date().toLocaleString('de-DE')}:
+💰 TOTAL: ${data.total} ${data.currency}
+🏪 STORE: ${data.store || 'Unbekannt'}
+📅 DATE: ${data.date || 'Unbekannt'}
+🎯 CONFIDENCE: ${data.confidence || 'Unbekannt'}
 
-💰 GESAMTBETRAG: ${data.total || 'Nicht erkannt'} ${data.currency || 'EUR'}
-🏪 GESCHÄFT: ${data.store || 'Nicht erkannt'}  
-📅 DATUM: ${data.date || 'Nicht erkannt'}
-🎯 VERTRAUEN: ${data.confidence || 'Unbekannt'}
+🛒 ITEMS:
+${data.items?.map((item, i) => `${i + 1}. ${item}`).join('\n') || 'Keine'}
 
-🛒 ARTIKEL:
-${data.items && data.items.length > 0 
-    ? data.items.map((item, i) => `${i + 1}. ${item}`).join('\n')
-    : 'Keine Artikel erkannt'
-}
-
-📄 VOLLTEXT (OCR):
+📄 RAW OCR:
 ${rawText}
 
 ---
-Generiert von Rabbit R1 Receipt Scanner
-${new Date().toISOString()}
-                    `;
-
-                    // Extrahiere Foto-Daten für Anhang
-                    const photoData = this.currentPhoto.data || this.currentPhoto.base64 || this.currentPhoto;
+Generated: ${new Date().toISOString()}`;
 
                     await rabbit.email.send({
                         to: "mahnke@gmail.com",
-                        subject: emailSubject,
-                        body: emailBody,
+                        subject: subject,
+                        body: body,
                         attachments: [{
                             name: `receipt_${Date.now()}.jpg`,
-                            data: photoData,
+                            data: this.currentPhoto,
                             mimeType: 'image/jpeg'
                         }]
                     });
 
-                    this.updateStatus('✅ E-Mail gesendet!', 'success');
+                    this.updateStatus(`✅ E-Mail gesendet${isDemoMode ? ' (simuliert)' : ''}!`, 'success');
 
                 } catch (error) {
                     console.error('E-Mail Fehler:', error);
@@ -680,43 +811,25 @@ ${new Date().toISOString()}
                     this.stopPreview();
                 }
                 
-                this.updateStatus('Bereit für neuen Scan', 'info');
+                this.updateStatus(isDemoMode ? 
+                    '🔧 Demo bereit - Leertaste für PTT' : 
+                    '✅ Bereit für neuen Scan', 'info');
             }
         }
 
         // App starten
         document.addEventListener('DOMContentLoaded', () => {
-            new RealReceiptScanner();
+            new ReceiptScanner();
         });
 
-        // Global Error Handler
+        // Error Handler
         window.addEventListener('unhandledrejection', (event) => {
-            console.error('Unbehandelter Fehler:', event.reason);
+            console.error('Fehler:', event.reason);
             const statusEl = document.getElementById('status');
             if (statusEl) {
                 statusEl.textContent = 'Systemfehler: ' + event.reason;
                 statusEl.className = 'status error';
             }
-        });
-
-        // Cleanup bei Page Unload
-        window.addEventListener('beforeunload', async () => {
-            try {
-                if (typeof rabbit !== 'undefined' && rabbit.camera) {
-                    const scanner = window.receiptScanner;
-                    if (scanner && scanner.isCameraActive()) {
-                        await rabbit.camera.stop();
-                    }
-                }
-            } catch (e) {
-                console.log('Cleanup Fehler:', e);
-            }
-        });
-        
-        // Globale Referenz für Cleanup
-        window.receiptScanner = null;
-        document.addEventListener('DOMContentLoaded', () => {
-            window.receiptScanner = new RealReceiptScanner();
         });
     </script>
 </body>
