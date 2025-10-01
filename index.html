@@ -1,22 +1,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <!-- Optimized Viewport for R1 Canvas: Ensures the page width matches the device width and prevents initial scaling. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rabbit Receipt Scanner</title>
+  <title>rabbit receipt scanner</title>
   <style>
-    /* Global box-sizing for predictable layout on constrained screen sizes */
+   
     * {
       box-sizing: border-box;
     }
-    /* Minimal R1-friendly design */
+
     body { 
       font-family: 'Inter', sans-serif; 
       text-align: center; 
       padding: 10px; 
-      background-color: #1a1a1a; /* Dark background, typical for Rabbit OS */
+      background-color: #1a1a1a;
       color: #fff;
-      margin: 0; /* Critical: Removes default browser margins */
+      margin: 0; 
     }
     h1 {
       color: #ff6e40; /* Orange accent color */
@@ -100,7 +99,6 @@
 
 
   <script>
-    // --- SDK SETUP AND CONFIGURATION ---
     
     // NOTE: This email is a placeholder. In the real R1 environment, the system should ideally
     // provide the authenticated user's email address dynamically.
@@ -145,7 +143,6 @@
 
       try {
         // 1. Start camera and capture photo
-        // *** Requires native R1 SDK to be present ***
         updateStatus('Camera starting up...', '#ff6e40', true);
         await rabbit.camera.start();
         updateStatus('Camera active. Please position the receipt...', '#ff6e40', true);
@@ -213,7 +210,7 @@ The Receipt Scanner has analyzed a receipt. Here are the results:
 ${rawText}
         
 Best regards,
-Your Rabbit R1 Receipt Scanner.`;
+Your rabbit r1 receipt scanner.`;
 
 
         // Send email with the photo as an attachment
