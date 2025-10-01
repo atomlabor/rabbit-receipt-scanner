@@ -1,0 +1,257 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Optimized Viewport for R1 Canvas: Ensures the page width matches the device width and prevents initial scaling. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rabbit Receipt Scanner</title>
+  <style>
+    /* Global box-sizing for predictable layout on constrained screen sizes */
+    * {
+      box-sizing: border-box;
+    }
+    /* Minimal R1-friendly design */
+    body { 
+      font-family: 'Inter', sans-serif; 
+      text-align: center; 
+      padding: 10px; 
+      background-color: #1a1a1a; /* Dark background, typical for Rabbit OS */
+      color: #fff;
+      margin: 0; /* Critical: Removes default browser margins */
+    }
+    h1 {
+      color: #ff6e40; /* Orange accent color */
+      font-size: 1.5em;
+      margin-bottom: 10px;
+    }
+    #status { 
+      margin: 10px 0; 
+      font-weight: bold; 
+      min-height: 20px;
+    }
+    #photoDisplay { 
+      max-width: 90%; 
+      height: auto; 
+      margin: 15px auto; 
+      border: 2px solid #333; 
+      border-radius: 6px;
+      display: none;
+    }
+    #resultBox { 
+      background-color: #2a2a2a; 
+      padding: 15px; 
+      border-radius: 8px; 
+      text-align: left; 
+      margin-top: 20px; 
+      box-shadow: 0 2px 5px rgba(0,0,0,0.5); 
+    }
+    h2 { 
+      color: #ccc; 
+      font-size: 1.1em;
+      border-bottom: 1px solid #444; 
+      padding-bottom: 5px; 
+      margin-top: 0;
+    }
+    button { 
+      background-color: #ff6e40; 
+      color: white; 
+      border: none; 
+      padding: 12px 20px; 
+      border-radius: 8px; 
+      font-size: 1em; 
+      cursor: pointer; 
+      transition: background-color 0.2s; 
+      width: 90%;
+      box-shadow: 0 4px #e05c33;
+    }
+    button:active {
+      box-shadow: 0 1px #e05c33;
+      transform: translateY(3px);
+    }
+    pre { 
+      white-space: pre-wrap; 
+      word-wrap: break-word; 
+      background-color: #1a1a1a; 
+      padding: 8px; 
+      border-radius: 4px; 
+      overflow-x: auto;
+      font-size: 0.75em;
+      color: #aaa;
+    }
+    .label { font-weight: bold; color: #fff; }
+    .value { color: #ff6e40; }
+  </style>
+</head>
+<body>
+  <h1>🐰 Receipt Scanner (AI Scan & Mail)</h1>
+  <button onclick="scanAndEmailReceipt()" id="scanButton">
+    Scan, Analyze & Email Receipt
+  </button>
+  <div id="status" style="color: #aaa;">Initializing...</div>
+  
+  <img id="photoDisplay" alt="Captured Receipt Photo">
+  
+  <div id="resultBox">
+    <h2>Analysis Result</h2>
+    <p><span class="label">Total Amount:</span> <span id="totalAmount" class="value">--</span></p>
+    <p><span class="label">Detected Items:</span> <span id="itemsList">--</span></p>
+    <h3>Raw OCR Text</h3>
+    <pre id="rawText">--</pre>
+  </div>
+
+
+  <script>
+    // --- SDK SETUP AND CONFIGURATION ---
+    
+    // NOTE: This email is a placeholder. In the real R1 environment, the system should ideally
+    // provide the authenticated user's email address dynamically.
+    const RECIPIENT_EMAIL = "r1_user_mail@rabbithole.com"; 
+    
+    // References to UI elements
+    const ui = {
+      status: document.getElementById('status'),
+      photoDisplay: document.getElementById('photoDisplay'),
+      totalAmount: document.getElementById('totalAmount'),
+      itemsList: document.getElementById('itemsList'),
+      rawText: document.getElementById('rawText'),
+      scanButton: document.getElementById('scanButton')
+    };
+    
+    // Function to update status and control the button state
+    function updateStatus(message, color = '#aaa', loading = false) {
+      ui.status.textContent = message;
+      ui.status.style.color = color;
+      
+      ui.scanButton.disabled = loading;
+      ui.scanButton.textContent = loading ? 'Processing...' : 'Scan, Analyze & Email Receipt';
+    }
+
+
+    // --- MAIN FUNCTIONALITY: SCAN, ANALYZE & SEND ---
+
+
+    async function scanAndEmailReceipt() {
+      // 0. Preparation
+      updateStatus('Starting scan process...', '#ff6e40', true);
+      
+      // Reset UI elements
+      ui.photoDisplay.style.display = 'none';
+      ui.totalAmount.textContent = '--';
+      ui.itemsList.textContent = '--';
+      ui.rawText.textContent = '--';
+
+
+      let photo = null; 
+
+
+      try {
+        // 1. Start camera and capture photo
+        // *** Requires native R1 SDK to be present ***
+        updateStatus('Camera starting up...', '#ff6e40', true);
+        await rabbit.camera.start();
+        updateStatus('Camera active. Please position the receipt...', '#ff6e40', true);
+        
+        // Wait period before taking photo
+        await new Promise(resolve => setTimeout(resolve, 1500)); 
+
+
+        photo = await rabbit.camera.takePhoto();
+        await rabbit.camera.stop(); 
+        updateStatus('Photo captured. Camera stopped.', 'green', true);
+
+
+        // Display photo
+        ui.photoDisplay.src = photo.dataUrl;
+        ui.photoDisplay.style.display = 'block';
+
+
+        // 2. Perform OCR (Text Recognition)
+        updateStatus('Text recognition (OCR) performing...', '#00aaff', true);
+        const ocrResult = await rabbit.ai.ocr(photo);
+        const rawText = ocrResult.text;
+        ui.rawText.textContent = rawText;
+        
+        // 3. AI Analysis for structured data extraction (JSON output enforced)
+        updateStatus('AI analysis for data extraction (Total/Items)...', '#00aaff', true);
+        
+        const prompt = `Extract the total amount (as a number) and the main purchased items (maximum 5 as a list) from the following text, and respond ONLY in the following JSON format: 
+        {"total": "Total_Amount_with_2_Decimal_Places", "items": ["Item 1", "Item 2", "Item 3", "Item 4", "Item 5"]}. Text: "${rawText}"`;
+
+
+        const aiResponse = await rabbit.ai.query(prompt);
+        
+        // Attempt to parse the JSON response
+        let analysisResult;
+        try {
+            analysisResult = JSON.parse(aiResponse.text.trim());
+        } catch (e) {
+            console.error("Failed to parse AI response:", aiResponse.text);
+            throw new Error('AI analysis returned invalid format. Could not extract data.');
+        }
+        
+        const total = `€ ${analysisResult.total}`;
+        const items = analysisResult.items.filter(item => item && item.trim() !== '').join(', '); 
+        
+        // 4. Display results in the UI
+        ui.totalAmount.textContent = total;
+        ui.itemsList.textContent = items;
+        
+        // 5. Create and send email
+        updateStatus('📧 Creating and sending email...', 'purple', true);
+        
+        const emailSubject = `[R1 Receipt] Analysis from ${new Date().toLocaleDateString('en-US')}`;
+        
+        const emailBody = `Hello!
+        
+The Receipt Scanner has analyzed a receipt. Here are the results:
+        
+- **Total Amount:** ${total}
+- **Detected Items:** ${items}
+        
+---
+        
+**Raw Detected Text (for verification):**
+${rawText}
+        
+Best regards,
+Your Rabbit R1 Receipt Scanner.`;
+
+
+        // Send email with the photo as an attachment
+        await rabbit.email.send({
+            to: RECIPIENT_EMAIL, 
+            subject: emailSubject, 
+            body: emailBody,
+            attachments: [
+                {
+                    dataUrl: photo.dataUrl,
+                    fileName: 'scanned_receipt.jpg',
+                    mimeType: 'image/jpeg'
+                }
+            ]
+        });
+
+
+        updateStatus(`✅ Sent successfully to ${RECIPIENT_EMAIL}!`, 'green', false);
+
+
+      } catch (error) {
+        updateStatus(`❌ Error: ${error.message || 'Unknown error in workflow'}`, 'red', false);
+        console.error('Final Error in Receipt Scanner:', error);
+        
+        // Ensure the camera is stopped in case of error
+        try {
+            if (rabbit.camera.is_active) {
+                await rabbit.camera.stop();
+            }
+        } catch (e) { /* Ignore */ }
+      }
+    }
+
+
+    // Initial status when the app loads
+    window.onload = () => {
+        updateStatus('Ready to scan.', '#aaa', false);
+    };
+  </script>
+</body>
+</html>
