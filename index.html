@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=240, height=282, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Receipt Scanner</title>
+    <title>R1 Receipt Scanner Delegated</title>
     <style>
+        /* --- R1 & OLED-Optimized Styles --- */
         * {
             margin: 0;
             padding: 0;
@@ -17,9 +18,9 @@
             width: 240px;
             height: 282px;
             overflow: hidden;
-            background: #0a0a0a;
-            color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #000000; /* Pure Black for OLED */
+            color: #ffffff;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             font-size: 12px;
         }
 
@@ -33,23 +34,19 @@
 
         /* Status Bar */
         .status-bar {
-            height: 30px;
-            background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+            height: 25px;
+            background: #0f0f0f;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 10px;
-            border-bottom: 1px solid #333;
+            padding: 0 8px;
+            border-bottom: 1px solid #1a1a1a;
         }
 
         .status-text {
             font-size: 10px;
-            color: #ff6e40;
+            color: #ff6e40; /* R1 accent color */
             font-weight: 600;
-        }
-
-        .status-icon {
-            font-size: 14px;
         }
 
         /* Main Content Area */
@@ -59,77 +56,31 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 15px;
+            padding: 10px;
+            overflow-y: auto;
         }
 
         /* Scan Button */
         .scan-btn {
-            width: 180px;
+            width: 200px;
             height: 50px;
             background: linear-gradient(135deg, #ff6e40 0%, #ff5722 100%);
             border: none;
-            border-radius: 25px;
+            border-radius: 8px;
             color: white;
-            font-size: 14px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(255, 110, 64, 0.4);
+            box-shadow: 0 4px 10px rgba(255, 110, 64, 0.4);
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
+            transition: transform 0.1s ease;
         }
 
-        .scan-btn:active {
-            transform: scale(0.95);
-            box-shadow: 0 2px 10px rgba(255, 110, 64, 0.3);
-        }
-
-        .scan-btn:disabled {
-            background: #333;
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
-
-        /* Processing Overlay */
-        .processing {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 240px;
-            height: 282px;
-            background: rgba(0, 0, 0, 0.95);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-        }
-
-        .processing.active {
-            display: flex;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid #333;
-            border-top: 3px solid #ff6e40;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .process-text {
-            margin-top: 15px;
-            font-size: 12px;
-            color: #ff6e40;
-            text-align: center;
-        }
+        .scan-btn:active { transform: scale(0.98); }
+        .scan-btn:disabled { background: #333; opacity: 0.5; }
 
         /* Photo Preview */
         .preview {
@@ -138,45 +89,35 @@
             border-radius: 8px;
             overflow: hidden;
             display: none;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             border: 2px solid #ff6e40;
         }
 
-        .preview.active {
-            display: block;
-        }
-
-        .preview img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+        .preview.active { display: block; }
+        .preview img { width: 100%; height: 100%; object-fit: cover; }
 
         /* Results Display */
         .results {
             display: none;
-            flex-direction: column;
             width: 220px;
-            max-height: 220px;
+            max-height: 200px;
             overflow-y: auto;
-            background: rgba(26, 26, 26, 0.8);
+            background: #1a1a1a;
             border-radius: 8px;
             padding: 12px;
         }
 
-        .results.active {
-            display: flex;
-        }
+        .results.active { display: flex; flex-direction: column; }
 
         .result-total {
-            font-size: 20px;
+            font-size: 22px;
             font-weight: bold;
-            color: #4caf50;
+            color: #76ff03; /* Neon Green */
             text-align: center;
-            margin-bottom: 10px;
-            padding: 10px;
-            background: rgba(76, 175, 80, 0.15);
-            border-radius: 6px;
+            margin-bottom: 12px;
+            padding: 8px;
+            background: rgba(118, 255, 3, 0.1);
+            border-radius: 4px;
         }
 
         .result-merchant {
@@ -197,9 +138,31 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        .result-items li:last-child {
-            border-bottom: none;
+        /* Processing Overlay */
+        .processing {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 240px;
+            height: 282px;
+            background: rgba(0, 0, 0, 0.98);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
         }
+
+        .processing.active { display: flex; }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top: 3px solid #ff6e40;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         /* Bottom Actions */
         .actions {
@@ -209,81 +172,51 @@
             padding: 0 10px;
             align-items: center;
             background: #0f0f0f;
-            border-top: 1px solid #333;
+            border-top: 1px solid #1a1a1a;
         }
 
         .action-btn {
             flex: 1;
             height: 30px;
-            background: rgba(255, 110, 64, 0.2);
-            border: 1px solid #ff6e40;
+            background: #2a2a2a;
+            border: 1px solid #444;
             border-radius: 6px;
-            color: #ff6e40;
-            font-size: 10px;
-            font-weight: 600;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 500;
             cursor: pointer;
             display: none;
+            transition: background 0.1s;
         }
 
-        .action-btn.active {
-            display: block;
+        .action-btn.active { display: block; }
+        .action-btn:nth-child(2).active {
+            background: #ff6e40;
+            border: 1px solid #ff6e40;
         }
-
-        .action-btn:active {
-            background: rgba(255, 110, 64, 0.4);
-        }
-
-        /* Hints */
+        
         .hint {
             position: absolute;
-            bottom: 45px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 9px;
-            color: #666;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 4px 10px;
-            border-radius: 10px;
+            bottom: 60px;
+            font-size: 8px;
+            color: #888;
         }
-
-        /* Scrollbar */
-        .results::-webkit-scrollbar {
-            width: 3px;
-        }
-
-        .results::-webkit-scrollbar-thumb {
-            background: #ff6e40;
-            border-radius: 2px;
-        }
-
-        /* Error Message */
-        .error {
-            color: #f44336;
-            font-size: 11px;
-            text-align: center;
-            padding: 8px;
-            background: rgba(244, 67, 54, 0.1);
-            border-radius: 6px;
-            margin: 10px 0;
-        }
+        .error { color: #ff5252; }
     </style>
 </head>
 <body>
     <div class="app">
-        <!-- Status Bar -->
         <div class="status-bar">
-            <span class="status-text" id="statusText">Bereit</span>
-            <span class="status-icon">📱</span>
+            <span class="status-text" id="statusText">Ready</span>
+            <span class="status-icon" id="statusIcon">🐰</span>
         </div>
 
-        <!-- Main Content -->
         <div class="content" id="content">
             <button class="scan-btn" id="scanBtn">
-                <span>📷</span>
-                <span>Beleg scannen</span>
+                <span>📸</span>
+                <span>Scan Receipt</span>
             </button>
-            
+
             <div class="preview" id="preview">
                 <img id="previewImg" alt="Preview">
             </div>
@@ -294,108 +227,103 @@
                 <ul class="result-items" id="resultItems"></ul>
             </div>
 
-            <div class="hint" id="hint">PTT drücken zum Scannen</div>
+            <div class="hint" id="hint">Press PTT or tap button</div>
         </div>
 
-        <!-- Processing Overlay -->
         <div class="processing" id="processing">
             <div class="spinner"></div>
-            <div class="process-text" id="processText">Wird verarbeitet...</div>
+            <div class="process-text" id="processText">Starting Camera...</div>
         </div>
 
-        <!-- Bottom Actions -->
         <div class="actions">
-            <button class="action-btn" id="retryBtn">🔄 Wiederholen</button>
-            <button class="action-btn" id="sendBtn">✉️ Senden</button>
+            <button class="action-btn" id="retryBtn">❌ New Scan</button>
+            <button class="action-btn" id="sendBtn">✉️ Send (Delegated)</button>
         </div>
     </div>
 
     <script>
-        // Receipt Scanner R1 - Produktionsversion
+        // --- Rabbit SDK Integration and Logic (English) ---
         class ReceiptScanner {
             constructor() {
-                this.ui = {
-                    statusText: document.getElementById('statusText'),
-                    scanBtn: document.getElementById('scanBtn'),
-                    preview: document.getElementById('preview'),
-                    previewImg: document.getElementById('previewImg'),
-                    results: document.getElementById('results'),
-                    resultTotal: document.getElementById('resultTotal'),
-                    resultMerchant: document.getElementById('resultMerchant'),
-                    resultItems: document.getElementById('resultItems'),
-                    processing: document.getElementById('processing'),
-                    processText: document.getElementById('processText'),
-                    retryBtn: document.getElementById('retryBtn'),
-                    sendBtn: document.getElementById('sendBtn'),
-                    hint: document.getElementById('hint')
-                };
+                // UI Elements
+                this.ui = {};
+                for (const id of ['statusText', 'statusIcon', 'scanBtn', 'preview', 'previewImg', 'results', 'resultTotal', 'resultMerchant', 'resultItems', 'processing', 'processText', 'retryBtn', 'sendBtn', 'hint', 'content']) {
+                    this.ui[id] = document.getElementById(id);
+                }
 
                 this.state = {
                     currentPhoto: null,
                     currentData: null,
                     rawText: null,
-                    isProcessing: false
+                    isProcessing: false,
+                    isCameraActive: false
                 };
 
                 this.init();
             }
 
             init() {
-                // Check R1 SDK
-                if (typeof rabbit === 'undefined') {
-                    this.showError('R1 SDK nicht verfügbar');
+                if (typeof rabbit === 'undefined' || !rabbit.camera || !rabbit.ai) {
+                    this.showError('R1 SDK (camera/ai) not available. App cannot start.', 60000);
+                    this.ui.scanBtn.disabled = true;
+                    this.updateStatus('ERROR', '🚫');
                     return;
                 }
 
-                // Button Events
                 this.ui.scanBtn.addEventListener('click', () => this.startScan());
                 this.ui.retryBtn.addEventListener('click', () => this.reset());
-                this.ui.sendBtn.addEventListener('click', () => this.sendEmail());
+                this.ui.sendBtn.addEventListener('click', () => this.delegateEmailAction()); 
 
-                // PTT Integration
                 if (rabbit.onPTTPress) {
                     rabbit.onPTTPress(() => {
-                        if (!this.state.isProcessing) {
+                        if (!this.state.isProcessing && !this.state.currentPhoto) {
                             this.startScan();
                         }
                     });
                 }
+                
+                if (rabbit.onAppQuit) {
+                    rabbit.onAppQuit(() => this.cleanupCamera());
+                }
 
-                this.updateStatus('Bereit', '📱');
+                this.updateStatus('Ready', '🐰');
+            }
+            
+            async cleanupCamera() {
+                 if (this.state.isCameraActive && rabbit.camera && rabbit.camera.stop) {
+                     await rabbit.camera.stop().catch(e => console.error("Camera stop error:", e));
+                     this.state.isCameraActive = false;
+                 }
             }
 
             async startScan() {
                 if (this.state.isProcessing) return;
 
                 try {
+                    this.resetVisuals();
                     this.state.isProcessing = true;
                     this.ui.scanBtn.disabled = true;
-                    this.showProcessing('Kamera wird gestartet...');
+                    this.showProcessing('Starting Camera...');
+                    this.updateStatus('Camera', '📸');
 
-                    // Start Camera
                     await rabbit.camera.start();
-                    
-                    this.updateProcessing('Beleg positionieren...');
-                    await this.wait(2000);
+                    this.state.isCameraActive = true;
+                    this.updateProcessing('Positioning receipt...');
+                    await this.wait(2000); 
 
-                    // Take Photo
-                    this.updateProcessing('📸 Foto wird aufgenommen...');
-                    const photo = await rabbit.camera.takePhoto({
-                        quality: 'high',
-                        format: 'jpeg'
-                    });
+                    this.updateProcessing('📸 Taking Photo...');
+                    const photo = await rabbit.camera.takePhoto({ quality: 'high', format: 'jpeg' });
+                    await this.cleanupCamera();
+                    if (!photo) throw new Error('Photo capture failed.');
 
-                    await rabbit.camera.stop();
-                    
                     this.state.currentPhoto = photo;
                     this.showPhoto(photo);
-
-                    // Process Photo
                     await this.processPhoto(photo);
 
                 } catch (error) {
-                    console.error('Scan error:', error);
-                    this.showError('Scan fehlgeschlagen: ' + error.message);
+                    await this.cleanupCamera();
+                    this.showError('Scan failed: ' + (error.message || 'Unknown error'));
+                    this.updateStatus('ERROR', '🚨');
                     this.reset();
                 } finally {
                     this.state.isProcessing = false;
@@ -406,128 +334,101 @@
 
             async processPhoto(photo) {
                 try {
-                    // OCR
-                    this.showProcessing('🔍 Text wird erkannt...');
-                    const rawText = await rabbit.ai.ocr(photo, {
-                        language: ['deu', 'eng'],
-                        enhance: true,
-                        deskew: true
-                    });
-
-                    if (!rawText || rawText.trim() === '') {
-                        throw new Error('Kein Text erkannt');
-                    }
-
+                    // 1. OCR (Text Recognition)
+                    this.showProcessing('🔍 Recognizing Text...');
+                    // Use 'deu' and 'eng' for broader receipt support
+                    const rawText = await rabbit.ai.ocr(photo, { language: ['deu', 'eng'], enhance: true }); 
+                    if (!rawText || rawText.trim() === '') throw new Error('No text recognized.');
                     this.state.rawText = rawText;
 
-                    // AI Analysis
-                    this.updateProcessing('🤖 KI analysiert Beleg...');
-                    const analysisPrompt = `Analysiere diesen deutschen Kassenbon und gib NUR JSON zurück (kein zusätzlicher Text):
+                    // 2. AI Analysis (LAM - Structured Data Extraction)
+                    this.updateProcessing('🤖 AI analyzing receipt...');
+                    const analysisPrompt = `Analyze this receipt and return ONLY a clean JSON string (no extra text):
 {
   "total": "XX.XX",
-  "currency": "EUR",
-  "merchant": "Geschäftsname",
+  "currency": "EUR/USD/etc",
+  "merchant": "Business Name",
   "date": "YYYY-MM-DD",
-  "items": ["Artikel 1", "Artikel 2", "Artikel 3"]
+  "items": ["Item with price", "Item with price"]
 }
+Receipt Text: ${rawText}`;
 
-Kassenbon-Text:
-${rawText}`;
-
-                    const aiResponse = await rabbit.ai.chat(analysisPrompt, {
-                        temperature: 0.1,
-                        max_tokens: 400
-                    });
-
-                    // Parse JSON
+                    const aiResponse = await rabbit.ai.chat(analysisPrompt, { temperature: 0.0, max_tokens: 500 });
                     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-                    if (!jsonMatch) {
-                        throw new Error('KI-Antwort ungültig');
-                    }
+                    if (!jsonMatch) throw new Error('AI response invalid.');
 
                     const data = JSON.parse(jsonMatch[0]);
-                    this.state.currentData = data;
+                    if (!data.total || !data.merchant) throw new Error('Missing key data (Total/Merchant).');
 
-                    // Show Results
+                    this.state.currentData = data;
                     this.showResults(data);
-                    
-                    this.updateStatus('Fertig', '✅');
+                    this.updateStatus('Done', '✅');
 
                 } catch (error) {
                     console.error('Processing error:', error);
-                    throw new Error('Verarbeitung fehlgeschlagen');
+                    throw new Error(error.message || 'Processing failed');
                 }
             }
 
+            async delegateEmailAction() {
+                if (!this.state.currentData || !this.state.currentPhoto) return;
+
+                try {
+                    this.showProcessing('🤖 Generating Email Command...');
+                    this.updateStatus('AI Action', '💬');
+
+                    const data = this.state.currentData;
+                    
+                    // Clear, natural language command to the LAM
+                    const commandPrompt = `Send an email to the registered user. 
+                    - The subject should be: [R1 Receipt] ${data.total} ${data.currency || 'EUR'} - ${data.merchant || 'Unknown'}. 
+                    - The email body should describe the scanned receipt from ${data.date || 'Unknown'} for ${data.total} ${data.currency || 'EUR'}. 
+                    - **Attach the original photo of the scanned receipt.** - RAW PHOTO DATA IS HERE (FOR LAM): ${this.state.currentPhoto.substring(0, 100)}... (truncated)`;
+
+                    // The AI interprets the command and triggers the OS email action (with user confirmation)
+                    await rabbit.ai.chat(commandPrompt, {
+                        temperature: 0.1, 
+                        max_tokens: 200
+                    });
+
+                    this.hideProcessing();
+                    this.updateStatus('Command Sent', '✅');
+                    
+                    // Reset the app as the rest of the interaction happens in the OS layer
+                    setTimeout(() => this.reset(), 500); 
+
+                } catch (error) {
+                    console.error('AI Command Error:', error);
+                    this.hideProcessing();
+                    this.showError('Sending via AI failed. Network issue?');
+                    this.updateStatus('ERROR', '🚨');
+                }
+            }
+
+            // --- UI Helper Functions ---
             showPhoto(photo) {
                 this.ui.previewImg.src = `data:image/jpeg;base64,${photo}`;
                 this.ui.preview.classList.add('active');
-                this.ui.scanBtn.style.display = 'none';
-                this.ui.hint.style.display = 'none';
             }
 
             showResults(data) {
+                this.ui.scanBtn.style.display = 'none';
+                this.ui.hint.style.display = 'none';
                 this.ui.resultTotal.textContent = `${data.total || '--'} ${data.currency || 'EUR'}`;
-                this.ui.resultMerchant.textContent = data.merchant || 'Unbekannt';
+                this.ui.resultMerchant.textContent = `${data.merchant || 'Unknown'} (${data.date || 'no date'})`;
 
                 this.ui.resultItems.innerHTML = '';
                 if (data.items && data.items.length > 0) {
-                    data.items.forEach(item => {
+                    data.items.slice(0, 8).forEach(item => { 
                         const li = document.createElement('li');
                         li.textContent = item;
                         this.ui.resultItems.appendChild(li);
                     });
-                }
+                } else { this.ui.resultItems.innerHTML = '<li>No individual items recognized.</li>'; }
 
                 this.ui.results.classList.add('active');
                 this.ui.retryBtn.classList.add('active');
                 this.ui.sendBtn.classList.add('active');
-            }
-
-            async sendEmail() {
-                if (!this.state.currentData || !this.state.currentPhoto) return;
-
-                try {
-                    this.showProcessing('📧 E-Mail wird gesendet...');
-
-                    const data = this.state.currentData;
-                    const emailBody = `Kassenbeleg-Scan vom ${new Date().toLocaleDateString('de-DE')}
-
-💰 Gesamtbetrag: ${data.total} ${data.currency}
-🏪 Geschäft: ${data.merchant}
-📅 Datum: ${data.date || 'Unbekannt'}
-
-📦 Artikel:
-${data.items ? data.items.map((item, i) => `${i+1}. ${item}`).join('\n') : 'Keine Artikel'}
-
-📄 Vollständiger OCR-Text:
-${this.state.rawText}
-
----
-Erstellt mit Receipt Scanner R1
-${new Date().toISOString()}`;
-
-                    await rabbit.email.send({
-                        to: 'mahnke@gmail.com',
-                        subject: `📱 Kassenbeleg: ${data.total} ${data.currency} - ${data.merchant}`,
-                        body: emailBody,
-                        attachments: [{
-                            name: `beleg_${Date.now()}.jpg`,
-                            data: this.state.currentPhoto,
-                            type: 'image/jpeg'
-                        }]
-                    });
-
-                    this.hideProcessing();
-                    this.updateStatus('E-Mail gesendet', '✉️');
-                    
-                    setTimeout(() => this.reset(), 2000);
-
-                } catch (error) {
-                    console.error('Email error:', error);
-                    this.hideProcessing();
-                    this.showError('E-Mail-Versand fehlgeschlagen');
-                }
             }
 
             reset() {
@@ -541,58 +442,46 @@ ${new Date().toISOString()}`;
                 this.ui.hint.style.display = 'block';
                 this.ui.retryBtn.classList.remove('active');
                 this.ui.sendBtn.classList.remove('active');
+                this.ui.content.querySelectorAll('.error').forEach(e => e.remove());
 
-                if (rabbit.camera?.is_active) {
-                    rabbit.camera.stop();
-                }
+                this.cleanupCamera();
+                this.updateStatus('Ready', '🐰');
+            }
 
-                this.updateStatus('Bereit', '📱');
+            resetVisuals() { 
+                this.ui.preview.classList.remove('active');
+                this.ui.results.classList.remove('active');
+                this.ui.scanBtn.style.display = 'none';
+                this.ui.hint.style.display = 'none';
+                this.ui.retryBtn.classList.remove('active');
+                this.ui.sendBtn.classList.remove('active');
+                this.ui.content.querySelectorAll('.error').forEach(e => e.remove());
             }
 
             showProcessing(text) {
                 this.ui.processText.textContent = text;
                 this.ui.processing.classList.add('active');
             }
-
-            updateProcessing(text) {
-                this.ui.processText.textContent = text;
-            }
-
-            hideProcessing() {
-                this.ui.processing.classList.remove('active');
-            }
-
-            updateStatus(text, icon = '📱') {
+            updateProcessing(text) { this.ui.processText.textContent = text; }
+            hideProcessing() { this.ui.processing.classList.remove('active'); }
+            updateStatus(text, icon = '🐰') {
                 this.ui.statusText.textContent = text;
-                document.querySelector('.status-icon').textContent = icon;
+                this.ui.statusIcon.textContent = icon;
             }
 
-            showError(message) {
+            showError(message, duration = 4000) {
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'error';
                 errorDiv.textContent = message;
-                this.ui.content.insertBefore(errorDiv, this.ui.scanBtn);
-                
-                setTimeout(() => errorDiv.remove(), 3000);
+                this.ui.content.insertBefore(errorDiv, this.ui.scanBtn.nextSibling);
+                setTimeout(() => errorDiv.remove(), duration);
             }
 
-            wait(ms) {
-                return new Promise(resolve => setTimeout(resolve, ms));
-            }
+            wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
         }
 
-        // App Start
         document.addEventListener('DOMContentLoaded', () => {
             new ReceiptScanner();
-        });
-
-        // Error Handling
-        window.addEventListener('error', (e) => {
-            console.error('Global error:', e.error);
-        });
-
-        window.addEventListener('unhandledrejection', (e) => {
-            console.error('Unhandled promise:', e.reason);
         });
     </script>
 </body>
