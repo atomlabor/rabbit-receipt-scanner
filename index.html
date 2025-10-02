@@ -4,10 +4,273 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=240, height=282, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Receipt Scanner R1</title>
-    <style>
-        /* --- styles wie in Deiner optimierten Version --- */
-        /* ... [Styles beibehalten, wie im letzten Beispiel] ... */
-    </style>
+<style>
+    /* --- r1 styles --- */
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        /* Wichtig für r1: Deaktiviert Touch-Feedback und verhindert ungewollte Textauswahl */
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+    }
+
+    body {
+        width: 240px;
+        height: 282px;
+        overflow: hidden; /* Verhindert unnötiges Scrollen des gesamten Körpers */
+        background: #000000; /* Reines Schwarz für LED-Effizienz */
+        color: #ffffff;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 12px;
+    }
+
+    .app {
+        width: 240px;
+        height: 282px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Status Bar */
+    .status-bar {
+        height: 25px;
+        background: #0f0f0f;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 8px;
+        border-bottom: 1px solid #1a1a1a;
+    }
+
+    .status-text {
+        font-size: 10px;
+        color: #ff6e40; /* R1 Akzentfarbe (Orange) */
+        font-weight: 600;
+    }
+
+    /* Main Content Area */
+    .content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+        overflow-y: auto; /* Erlaubt dem Inhalt, bei Bedarf zu scrollen */
+        padding-bottom: 50px; /* Platz für die Actions Bar */
+    }
+
+    /* Scan Button */
+    .scan-btn {
+        width: 200px;
+        height: 50px;
+        background: linear-gradient(135deg, #ff6e40 0%, #ff5722 100%);
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 4px 10px rgba(255, 110, 64, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        transition: transform 0.1s ease;
+    }
+
+    .scan-btn:active {
+        transform: scale(0.98);
+    }
+    .scan-btn:disabled {
+        background: #333;
+        opacity: 0.5;
+    }
+
+    /* Photo Preview */
+    .preview {
+        width: 220px;
+        height: 165px;
+        border-radius: 8px;
+        overflow: hidden;
+        display: none;
+        margin-bottom: 15px;
+        border: 2px solid #ff6e40;
+    }
+
+    .preview.active {
+        display: block;
+    }
+    .preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    /* Results Display */
+    .results {
+        display: none;
+        width: 220px;
+        max-height: 200px; /* Begrenzte Höhe, um den Action-Buttons Platz zu lassen */
+        overflow-y: auto;
+        background: #1a1a1a;
+        border-radius: 8px;
+        padding: 12px;
+        position: relative;
+    }
+
+    .results.active {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .result-total {
+        font-size: 22px;
+        font-weight: bold;
+        color: #76ff03; /* Neongrün für den Betrag */
+        text-align: center;
+        margin-bottom: 12px;
+        padding: 8px;
+        background: rgba(118, 255, 3, 0.1);
+        border-radius: 4px;
+    }
+
+    .result-merchant {
+        font-size: 11px;
+        color: #ff6e40;
+        text-align: center;
+        margin-bottom: 8px;
+    }
+
+    .result-items {
+        list-style: none;
+        font-size: 10px;
+        color: #ccc;
+        padding: 0;
+        margin: 0;
+    }
+
+    .result-items li {
+        padding: 4px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .scroll-indicator {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 9px;
+        color: #888;
+        background: linear-gradient(to top, #1a1a1a 70%, transparent 100%);
+        padding: 4px 0;
+        pointer-events: none;
+        display: none;
+        opacity: 0.8;
+    }
+    
+    .scroll-indicator.active {
+        display: block;
+    }
+
+    /* Processing Overlay */
+    .processing {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 240px;
+        height: 282px;
+        background: rgba(0, 0, 0, 0.98);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+    }
+
+    .processing.active {
+        display: flex;
+    }
+    .process-text {
+        margin-top: 15px;
+    }
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #333;
+        border-top: 3px solid #ff6e40;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* Hint */
+    .hint {
+        position: absolute;
+        bottom: 60px;
+        font-size: 8px;
+        color: #888;
+        display: block;
+    }
+
+    /* Error Message */
+    .error {
+        color: #ff5252;
+        font-size: 10px;
+        margin-top: 5px;
+        text-align: center;
+        padding: 5px;
+        border: 1px solid #ff5252;
+        border-radius: 4px;
+    }
+
+    /* Bottom Actions Bar */
+    .actions {
+        height: 40px;
+        width: 240px;
+        display: flex;
+        gap: 8px;
+        padding: 0 10px;
+        align-items: center;
+        background: #0f0f0f;
+        border-top: 1px solid #1a1a1a;
+        position: absolute;
+        bottom: 0;
+    }
+
+    .action-btn {
+        flex: 1;
+        height: 30px;
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 6px;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        display: none;
+        transition: background 0.1s;
+    }
+
+    .action-btn.active {
+        display: block;
+    }
+    .action-btn:nth-child(2).active {
+        /* Send Button - Akzentfarbe */
+        background: #ff6e40;
+        border: 1px solid #ff6e40;
+    }
+</style>
 </head>
 <body>
     <div class="app">
