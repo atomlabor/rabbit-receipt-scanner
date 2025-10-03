@@ -34,73 +34,35 @@
             height: 25px;
             background: #0f0f0f;
             display: flex;
-            align-items: center;
             justify-content: space-between;
-            padding: 0 8px;
-            border-bottom: 1px solid #1a1a1a;
+            align-items: center;
+            padding: 0 10px;
+            border-bottom: 1px solid #222;
+            flex-shrink: 0;
         }
         .status-text {
             font-size: 10px;
-            color: #ff6e40;
-            font-weight: 600;
-        }
-        .status-icon {
-            display: flex;
-            align-items: center;
+            color: #aaa;
         }
         .status-icon img {
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
         }
-        /* Main Content Area */
+        /* Content */
         .content {
             flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 10px;
-            overflow-y: auto;
-            padding-bottom: 50px;
-        }
-        /* Scan Button */
-        .scan-btn {
-            width: 200px;
-            height: 50px;
-            background: linear-gradient(135deg, #ff6e40 0%, #ff5722 100%);
-            border: none;
-            border-radius: 8px;
-            color: white;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(255, 110, 64, 0.4);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            transition: transform 0.1s ease;
-        }
-        .scan-btn:active {
-            transform: scale(0.98);
-        }
-        .scan-btn:disabled {
-            background: #333;
-            opacity: 0.5;
-        }
-        .scan-btn img {
-            width: 24px;
-            height: 24px;
-        }
-        /* Camera Video */
-        .camera-container {
-            display: none;
-            width: 220px;
-            height: 165px;
-            border-radius: 8px;
+            position: relative;
             overflow: hidden;
-            margin-bottom: 15px;
-            border: 2px solid #ff6e40;
+        }
+        /* Camera Container */
+        .camera-container {
+            width: 100%;
+            height: 100%;
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: #000;
         }
         .camera-container.active {
             display: block;
@@ -109,106 +71,142 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            cursor: pointer;
         }
+        /* Canvas for capture */
         #canvas {
             display: none;
         }
-        /* Photo Preview */
+        /* Preview */
         .preview {
-            width: 220px;
-            height: 165px;
-            border-radius: 8px;
-            overflow: hidden;
+            width: 100%;
+            height: 100%;
             display: none;
-            margin-bottom: 15px;
-            border: 2px solid #ff6e40;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: #000;
         }
         .preview.active {
             display: block;
         }
-        .preview img {
+        #previewImg {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
         }
-        /* Results Display */
+        /* Results */
         .results {
+            width: 100%;
+            height: 100%;
             display: none;
-            width: 220px;
-            max-height: 200px;
+            flex-direction: column;
+            padding: 10px;
+            background: #0a0a0a;
             overflow-y: auto;
-            background: #1a1a1a;
-            border-radius: 8px;
-            padding: 12px;
-            position: relative;
         }
         .results.active {
             display: flex;
-            flex-direction: column;
         }
         .result-total {
-            font-size: 22px;
-            font-weight: bold;
-            color: #76ff03;
-            text-align: center;
-            margin-bottom: 12px;
-            padding: 8px;
-            background: rgba(118, 255, 3, 0.1);
-            border-radius: 4px;
+            font-size: 24px;
+            font-weight: 700;
+            color: #ff6e40;
+            margin-bottom: 8px;
         }
         .result-merchant {
-            font-size: 11px;
-            color: #ff6e40;
-            text-align: center;
-            margin-bottom: 8px;
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 12px;
         }
         .result-items {
             list-style: none;
-            font-size: 10px;
-            color: #ccc;
-            padding: 0;
-            margin: 0;
+            font-size: 11px;
         }
         .result-items li {
             padding: 4px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid #222;
+        }
+        /* OCR Results Section */
+        .ocr-results {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #333;
+        }
+        .ocr-title {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+        .ocr-text {
+            font-size: 10px;
+            color: #ccc;
+            line-height: 1.4;
+            max-height: 80px;
+            overflow-y: auto;
         }
         .scroll-indicator {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
             text-align: center;
-            font-size: 9px;
-            color: #888;
-            background: linear-gradient(to top, #1a1a1a 70%, transparent 100%);
-            padding: 4px 0;
-            pointer-events: none;
-            display: none;
-            opacity: 0.8;
+            padding: 8px;
+            color: #666;
+            font-size: 10px;
         }
-        .scroll-indicator.active {
-            display: block;
+        /* Hint */
+        .hint {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: #888;
+            text-align: center;
+        }
+        /* Scan Button */
+        .scan-btn {
+            width: 120px;
+            height: 120px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #ff6e40 0%, #ff4081 100%);
+            border: none;
+            border-radius: 20px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(255, 110, 64, 0.4);
+        }
+        .scan-btn img {
+            width: 40px;
+            height: 40px;
+        }
+        .scan-btn.hidden {
+            display: none;
         }
         /* Processing Overlay */
         .processing {
             position: absolute;
             top: 0;
             left: 0;
-            width: 240px;
-            height: 282px;
-            background: rgba(0, 0, 0, 0.98);
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
             display: none;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
+            align-items: center;
             z-index: 100;
         }
         .processing.active {
             display: flex;
-        }
-        .process-text {
-            margin-top: 15px;
         }
         .spinner {
             width: 40px;
@@ -219,43 +217,21 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-            100% {
-                transform: rotate(360deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        /* Hint */
-        .hint {
-            position: absolute;
-            bottom: 60px;
-            font-size: 8px;
-            color: #888;
-            display: block;
+        .process-text {
+            margin-top: 15px;
+            font-size: 12px;
+            color: #aaa;
         }
-        /* Error Message */
-        .error {
-            color: #ff5252;
-            font-size: 10px;
-            margin-top: 5px;
-            text-align: center;
-            padding: 5px;
-            border: 1px solid #ff5252;
-            border-radius: 4px;
-        }
-        /* Bottom Actions Bar */
+        /* Actions */
         .actions {
-            height: 40px;
-            width: 240px;
+            height: 35px;
             display: flex;
             gap: 8px;
-            padding: 0 10px;
-            align-items: center;
-            background: #0f0f0f;
-            border-top: 1px solid #1a1a1a;
-            position: absolute;
-            bottom: 0;
+            padding: 0 10px 8px;
+            flex-shrink: 0;
         }
         .action-btn {
             flex: 1;
@@ -303,6 +279,10 @@
                 <div class="result-total" id="resultTotal">--</div>
                 <div class="result-merchant" id="resultMerchant">--</div>
                 <ul class="result-items" id="resultItems"></ul>
+                <div class="ocr-results" id="ocrResults">
+                    <div class="ocr-title">Erkannter Text:</div>
+                    <div class="ocr-text" id="ocrText">OCR-Auswertung läuft...</div>
+                </div>
                 <div class="scroll-indicator" id="scrollIndicator">↕ Scroll</div>
             </div>
             <div class="hint" id="hint">Press PTT or tap the button</div>
