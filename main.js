@@ -1,6 +1,5 @@
 // Rabbit Receipt Scanner - Enhanced version with SMTP email support
 // OCR supports both German and English
-
 (function() {
   'use strict';
   
@@ -113,8 +112,10 @@
       processText.textContent = 'Scanning receipt...';
       
       // Initialize Tesseract with German and English language support
-      const worker = await Tesseract.createWorker(['deu', 'eng'], 1, {
+      console.log('[OCR] Starting Tesseract worker...');
+      const worker = await Tesseract.createWorker({
         logger: m => {
+          console.log('[Tesseract]', m);
           if (m.status === 'recognizing text') {
             const progress = Math.round(m.progress * 100);
             processText.textContent = `Processing: ${progress}%`;
@@ -122,9 +123,16 @@
         }
       });
       
+      console.log('[OCR] Loading languages: deu+eng...');
+      await worker.loadLanguage('deu+eng');
+      console.log('[OCR] Initializing worker...');
+      await worker.initialize('deu+eng');
+      
+      console.log('[OCR] Recognizing text...');
       // Perform OCR
       const { data } = await worker.recognize(imageData);
       ocrResultText = data.text;
+      console.log('[OCR] Text recognized:', data.text.substring(0, 100));
       
       // Clean up worker
       await worker.terminate();
@@ -144,8 +152,11 @@
       }
       
     } catch (err) {
-      console.error('OCR Error:', err);
-      ocrText.textContent = 'Error: Could not process receipt. ' + err.message;
+      console.error('[OCR] Error:', err);
+      console.error('[OCR] Failed at:', err.stack);
+      const errorMessage = err?.message || err?.toString() || 'Unknown error';
+      ocrText.textContent = `Error: Could not process receipt. ${errorMessage}`;
+      console.error('Full error object:', JSON.stringify(err, null, 2));
       currentState = 'results';
       updateUI();
       isScanning = false;
@@ -297,7 +308,8 @@
       
     } catch (err) {
       console.error('Email error:', err);
-      alert('Could not send email: ' + err.message);
+      const errorMessage = err?.message || err?.toString() || 'Unknown error';
+      alert('Could not send email: ' + errorMessage);
       processing.classList.remove('active');
     }
   }
