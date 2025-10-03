@@ -4,669 +4,318 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=240, height=282, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Receipt Scanner R1</title>
-<style>
-    /* --- r1 styles --- */
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        /* Wichtig für r1: Deaktiviert Touch-Feedback und verhindert ungewollte Textauswahl */
-        -webkit-tap-highlight-color: transparent;
-        user-select: none;
-    }
-
-    body {
-        width: 240px;
-        height: 282px;
-        overflow: hidden; /* Verhindert unnötiges Scrollen des gesamten Körpers */
-        background: #000000; /* Reines Schwarz für LED-Effizienz */
-        color: #ffffff;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 12px;
-    }
-
-    .app {
-        width: 240px;
-        height: 282px;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-    }
-
-    /* Status Bar */
-    .status-bar {
-        height: 25px;
-        background: #0f0f0f;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 8px;
-        border-bottom: 1px solid #1a1a1a;
-    }
-
-    .status-text {
-        font-size: 10px;
-        color: #ff6e40; /* R1 Akzentfarbe (Orange) */
-        font-weight: 600;
-    }
-
-    /* Main Content Area */
-    .content {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 10px;
-        overflow-y: auto; /* Erlaubt dem Inhalt, bei Bedarf zu scrollen */
-        padding-bottom: 50px; /* Platz für die Actions Bar */
-    }
-
-    /* Scan Button */
-    .scan-btn {
-        width: 200px;
-        height: 50px;
-        background: linear-gradient(135deg, #ff6e40 0%, #ff5722 100%);
-        border: none;
-        border-radius: 8px;
-        color: white;
-        font-size: 16px;
-        font-weight: bold;
-        cursor: pointer;
-        box-shadow: 0 4px 10px rgba(255, 110, 64, 0.4);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        transition: transform 0.1s ease;
-    }
-
-    .scan-btn:active {
-        transform: scale(0.98);
-    }
-    .scan-btn:disabled {
-        background: #333;
-        opacity: 0.5;
-    }
-
-    /* Photo Preview */
-    .preview {
-        width: 220px;
-        height: 165px;
-        border-radius: 8px;
-        overflow: hidden;
-        display: none;
-        margin-bottom: 15px;
-        border: 2px solid #ff6e40;
-    }
-
-    .preview.active {
-        display: block;
-    }
-    .preview img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    /* Results Display */
-    .results {
-        display: none;
-        width: 220px;
-        max-height: 200px; /* Begrenzte Höhe, um den Action-Buttons Platz zu lassen */
-        overflow-y: auto;
-        background: #1a1a1a;
-        border-radius: 8px;
-        padding: 12px;
-        position: relative;
-    }
-
-    .results.active {
-        display: flex;
-        flex-direction: column;
-    }
-
-    .result-total {
-        font-size: 22px;
-        font-weight: bold;
-        color: #76ff03; /* Neongrün für den Betrag */
-        text-align: center;
-        margin-bottom: 12px;
-        padding: 8px;
-        background: rgba(118, 255, 3, 0.1);
-        border-radius: 4px;
-    }
-
-    .result-merchant {
-        font-size: 11px;
-        color: #ff6e40;
-        text-align: center;
-        margin-bottom: 8px;
-    }
-
-    .result-items {
-        list-style: none;
-        font-size: 10px;
-        color: #ccc;
-        padding: 0;
-        margin: 0;
-    }
-
-    .result-items li {
-        padding: 4px 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    
-    .scroll-indicator {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        text-align: center;
-        font-size: 9px;
-        color: #888;
-        background: linear-gradient(to top, #1a1a1a 70%, transparent 100%);
-        padding: 4px 0;
-        pointer-events: none;
-        display: none;
-        opacity: 0.8;
-    }
-    
-    .scroll-indicator.active {
-        display: block;
-    }
-
-    /* Processing Overlay */
-    .processing {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 240px;
-        height: 282px;
-        background: rgba(0, 0, 0, 0.98);
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 100;
-    }
-
-    .processing.active {
-        display: flex;
-    }
-    .process-text {
-        margin-top: 15px;
-    }
-    .spinner {
-        width: 40px;
-        height: 40px;
-        border: 3px solid #333;
-        border-top: 3px solid #ff6e40;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-        0% {
-            transform: rotate(0deg);
+    <style>
+        /* --- r1 styles --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
         }
-        100% {
-            transform: rotate(360deg);
+        body {
+            width: 240px;
+            height: 282px;
+            overflow: hidden;
+            background: #000000;
+            color: #ffffff;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 12px;
         }
-    }
-
-    /* Hint */
-    .hint {
-        position: absolute;
-        bottom: 60px;
-        font-size: 8px;
-        color: #888;
-        display: block;
-    }
-
-    /* Error Message */
-    .error {
-        color: #ff5252;
-        font-size: 10px;
-        margin-top: 5px;
-        text-align: center;
-        padding: 5px;
-        border: 1px solid #ff5252;
-        border-radius: 4px;
-    }
-
-    /* Bottom Actions Bar */
-    .actions {
-        height: 40px;
-        width: 240px;
-        display: flex;
-        gap: 8px;
-        padding: 0 10px;
-        align-items: center;
-        background: #0f0f0f;
-        border-top: 1px solid #1a1a1a;
-        position: absolute;
-        bottom: 0;
-    }
-
-    .action-btn {
-        flex: 1;
-        height: 30px;
-        background: #2a2a2a;
-        border: 1px solid #444;
-        border-radius: 6px;
-        color: #fff;
-        font-size: 11px;
-        font-weight: 500;
-        cursor: pointer;
-        display: none;
-        transition: background 0.1s;
-    }
-
-    .action-btn.active {
-        display: block;
-    }
-    .action-btn:nth-child(2).active {
-        /* Send Button - Akzentfarbe */
-        background: #ff6e40;
-        border: 1px solid #ff6e40;
-    }
-</style>
+        .app {
+            width: 240px;
+            height: 282px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Status Bar */
+        .status-bar {
+            height: 25px;
+            background: #0f0f0f;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 8px;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .status-text {
+            font-size: 10px;
+            color: #ff6e40;
+            font-weight: 600;
+        }
+        .status-icon {
+            display: flex;
+            align-items: center;
+        }
+        .status-icon img {
+            width: 18px;
+            height: 18px;
+        }
+        /* Main Content Area */
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            overflow-y: auto;
+            padding-bottom: 50px;
+        }
+        /* Scan Button */
+        .scan-btn {
+            width: 200px;
+            height: 50px;
+            background: linear-gradient(135deg, #ff6e40 0%, #ff5722 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(255, 110, 64, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.1s ease;
+        }
+        .scan-btn:active {
+            transform: scale(0.98);
+        }
+        .scan-btn:disabled {
+            background: #333;
+            opacity: 0.5;
+        }
+        .scan-btn img {
+            width: 24px;
+            height: 24px;
+        }
+        /* Camera Video */
+        .camera-container {
+            display: none;
+            width: 220px;
+            height: 165px;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            border: 2px solid #ff6e40;
+        }
+        .camera-container.active {
+            display: block;
+        }
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #canvas {
+            display: none;
+        }
+        /* Photo Preview */
+        .preview {
+            width: 220px;
+            height: 165px;
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            margin-bottom: 15px;
+            border: 2px solid #ff6e40;
+        }
+        .preview.active {
+            display: block;
+        }
+        .preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        /* Results Display */
+        .results {
+            display: none;
+            width: 220px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 12px;
+            position: relative;
+        }
+        .results.active {
+            display: flex;
+            flex-direction: column;
+        }
+        .result-total {
+            font-size: 22px;
+            font-weight: bold;
+            color: #76ff03;
+            text-align: center;
+            margin-bottom: 12px;
+            padding: 8px;
+            background: rgba(118, 255, 3, 0.1);
+            border-radius: 4px;
+        }
+        .result-merchant {
+            font-size: 11px;
+            color: #ff6e40;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .result-items {
+            list-style: none;
+            font-size: 10px;
+            color: #ccc;
+            padding: 0;
+            margin: 0;
+        }
+        .result-items li {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .scroll-indicator {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 9px;
+            color: #888;
+            background: linear-gradient(to top, #1a1a1a 70%, transparent 100%);
+            padding: 4px 0;
+            pointer-events: none;
+            display: none;
+            opacity: 0.8;
+        }
+        .scroll-indicator.active {
+            display: block;
+        }
+        /* Processing Overlay */
+        .processing {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 240px;
+            height: 282px;
+            background: rgba(0, 0, 0, 0.98);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .processing.active {
+            display: flex;
+        }
+        .process-text {
+            margin-top: 15px;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top: 3px solid #ff6e40;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+        /* Hint */
+        .hint {
+            position: absolute;
+            bottom: 60px;
+            font-size: 8px;
+            color: #888;
+            display: block;
+        }
+        /* Error Message */
+        .error {
+            color: #ff5252;
+            font-size: 10px;
+            margin-top: 5px;
+            text-align: center;
+            padding: 5px;
+            border: 1px solid #ff5252;
+            border-radius: 4px;
+        }
+        /* Bottom Actions Bar */
+        .actions {
+            height: 40px;
+            width: 240px;
+            display: flex;
+            gap: 8px;
+            padding: 0 10px;
+            align-items: center;
+            background: #0f0f0f;
+            border-top: 1px solid #1a1a1a;
+            position: absolute;
+            bottom: 0;
+        }
+        .action-btn {
+            flex: 1;
+            height: 30px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            display: none;
+            transition: background 0.1s;
+        }
+        .action-btn.active {
+            display: block;
+        }
+        .action-btn:nth-child(2).active {
+            background: #ff6e40;
+            border: 1px solid #ff6e40;
+        }
+    </style>
 </head>
 <body>
     <div class="app">
         <div class="status-bar">
             <span class="status-text" id="statusText">Ready</span>
-            <span class="status-icon" id="statusIcon">🐰</span>
+            <span class="status-icon" id="statusIcon">
+                <img src="https://raw.githubusercontent.com/atomlabor/rabbit-receipt-scanner/main/rabbit.png" alt="Rabbit" id="statusIconImg">
+            </span>
         </div>
-
         <div class="content" id="content">
             <button class="scan-btn" id="scanBtn">
-                <span>📸</span>
-                <span>Scan Receipt</span>
+                <img src="https://raw.githubusercontent.com/atomlabor/rabbit-receipt-scanner/main/r1-cam.png" alt="Camera">
+                Scan Receipt
             </button>
-
-            <div class="preview" id="preview">
-                <img id="previewImg" alt="Preview">
+            <div class="camera-container" id="cameraContainer">
+                <video id="video" autoplay playsinline></video>
             </div>
-
+            <canvas id="canvas"></canvas>
+            <div class="preview" id="preview">
+                <img alt="Preview" id="previewImg">
+            </div>
             <div class="results" id="results">
                 <div class="result-total" id="resultTotal">--</div>
                 <div class="result-merchant" id="resultMerchant">--</div>
                 <ul class="result-items" id="resultItems"></ul>
                 <div class="scroll-indicator" id="scrollIndicator">↕ Scroll</div>
             </div>
-
             <div class="hint" id="hint">Press PTT or tap the button</div>
         </div>
-
         <div class="processing" id="processing">
             <div class="spinner"></div>
             <div class="process-text" id="processText">Starting camera...</div>
         </div>
-
         <div class="actions">
             <button class="action-btn" id="retryBtn">❌ New Scan</button>
             <button class="action-btn" id="sendBtn">✉️ Send</button>
         </div>
     </div>
-
-    <script>
-        // --- Keep all JS as optimized, only update UI text strings to English below ---
-        class ReceiptScanner {
-            constructor() {
-                this.ui = {};
-                const elementIds = [
-                    'statusText', 'statusIcon', 'scanBtn', 'preview', 
-                    'previewImg', 'results', 'resultTotal', 'resultMerchant', 
-                    'resultItems', 'processing', 'processText', 'retryBtn', 
-                    'sendBtn', 'hint', 'content', 'scrollIndicator'
-                ];
-                elementIds.forEach(id => {
-                    this.ui[id] = document.getElementById(id);
-                });
-
-                this.state = { /* ... wie gehabt ... */ };
-
-                this.init();
-            }
-
-            init() {
-                if (typeof rabbit === 'undefined') {
-                    this.showError('Rabbit SDK not available. Please open on the R1 device.', 0);
-                    this.ui.scanBtn.disabled = true;
-                    this.updateStatus('ERROR', '🚫');
-                    return;
-                }
-                if (!rabbit.camera || !rabbit.ai) {
-                    this.showError('Camera or AI not available.', 0);
-                    this.ui.scanBtn.disabled = true;
-                    this.updateStatus('ERROR', '🚫');
-                    return;
-                }
-
-                this.ui.scanBtn.addEventListener('click', () => this.startScan());
-                this.ui.retryBtn.addEventListener('click', () => this.reset());
-                this.ui.sendBtn.addEventListener('click', () => this.delegateEmailAction());
-
-                if (rabbit.onPTTPress) {
-                    rabbit.onPTTPress(() => {
-                        if (!this.state.isProcessing && !this.state.currentPhoto) {
-                            this.startScan();
-                        }
-                    });
-                }
-                if (rabbit.onScrollWheel && this.ui.results) {
-                    rabbit.onScrollWheel((direction) => {
-                        if (this.ui.results.classList.contains('active')) {
-                            const scrollAmount = direction > 0 ? 30 : -30;
-                            this.ui.results.scrollBy(0, scrollAmount);
-                        }
-                    });
-                }
-                if (rabbit.onAppQuit) {
-                    rabbit.onAppQuit(() => this.cleanup());
-                }
-
-                this.updateStatus('Ready', '🐰');
-            }
-
-            async cleanup() {
-                try {
-                    if (this.state.isCameraActive && rabbit.camera && rabbit.camera.stop) {
-                        await rabbit.camera.stop();
-                        this.state.isCameraActive = false;
-                    }
-                    if (this.state.currentPhoto) {
-                        this.state.currentPhoto = null;
-                    }
-                } catch (e) {
-                    console.error('Cleanup error:', e);
-                }
-            }
-
-            async startScan() {
-                if (this.state.isProcessing) return;
-                try {
-                    this.resetVisuals();
-                    this.state.isProcessing = true;
-                    this.ui.scanBtn.disabled = true;
-                    this.showProcessing('Starting camera...');
-                    this.updateStatus('Camera', '📸');
-
-                    await Promise.race([
-                        rabbit.camera.start(),
-                        this.timeout(5000, 'Camera start timeout')
-                    ]);
-                    this.state.isCameraActive = true;
-                    this.updateProcessing('Position your receipt...');
-                    await this.wait(1500);
-
-                    this.updateProcessing('📸 Taking photo...');
-                    const photo = await Promise.race([
-                        rabbit.camera.takePhoto({ 
-                            quality: 'high', 
-                            format: 'jpeg',
-                            optimize: true 
-                        }),
-                        this.timeout(5000, 'Photo timeout')
-                    ]);
-
-                    await this.cleanup();
-
-                    if (!photo || photo.length < 100) {
-                        throw new Error('Photo capture failed');
-                    }
-                    this.state.currentPhoto = photo;
-                    this.showPhoto(photo);
-                    await this.processPhoto(photo);
-                    this.state.retryCount = 0;
-
-                } catch (error) {
-                    await this.cleanup();
-                    console.error('Scan error:', error);
-                    if (this.state.retryCount < this.state.maxRetries) {
-                        this.state.retryCount++;
-                        this.showError(`Error: ${error.message}. Retrying... (${this.state.retryCount}/${this.state.maxRetries})`,2000);
-                        await this.wait(2000);
-                        this.ui.scanBtn.disabled = false;
-                        this.state.isProcessing = false;
-                        this.hideProcessing();
-                    } else {
-                        this.showError('Scan failed: ' + (error.message || 'Unknown error'), 5000);
-                        this.updateStatus('ERROR', '🚨');
-                        this.reset();
-                    }
-                } finally {
-                    if (!this.state.isProcessing) return;
-                    this.state.isProcessing = false;
-                    this.ui.scanBtn.disabled = false;
-                    this.hideProcessing();
-                }
-            }
-
-            async processPhoto(photo) {
-                try {
-                    this.showProcessing('🔍 Recognizing text...');
-                    const ocrOptions = {
-                        language: ['deu', 'eng'],
-                        enhance: true,
-                        dpi: 300,
-                        detectRotation: true
-                    };
-                    const rawText = await Promise.race([
-                        rabbit.ai.ocr(photo, ocrOptions),
-                        this.timeout(15000, 'OCR timeout')
-                    ]);
-                    if (!rawText || rawText.trim().length < 10) {
-                        throw new Error('No text recognized. Try better lighting and focus.');
-                    }
-                    this.state.rawText = rawText;
-
-                    this.updateProcessing('🤖 AI analyzing receipt...');
-                    const analysisPrompt = `You are a receipt extraction expert. Analyze this receipt and ONLY return valid JSON (no extra text):
-
-IMPORTANT:
-- Find the total amount (Total, Amount, Sum, etc.)
-- Find the merchant name (top of receipt)
-- Find the date
-- List recognized items
-
-JSON format:
-{
-  "total": "XX.XX",
-  "currency": "EUR",
-  "merchant": "Store Name",
-  "date": "YYYY-MM-DD",
-  "items": ["Item 1 - X.XX€", "Item 2 - X.XX€"]
-}
-
-RECEIPT TEXT: 
-${rawText}
-
-Reply ONLY with the JSON, nothing else.`;
-                    const aiResponse = await Promise.race([
-                        rabbit.ai.chat(analysisPrompt, {
-                            temperature: 0.0,
-                            max_tokens: 800,
-                            model: 'gpt-4'
-                        }),
-                        this.timeout(20000, 'AI timeout')
-                    ]);
-
-                    const data = this.parseAIResponse(aiResponse);
-
-                    if (!data.total && !data.merchant) {
-                        throw new Error('No relevant data found. Please rescan your receipt.');
-                    }
-
-                    this.state.currentData = data;
-                    this.showResults(data);
-                    this.updateStatus('Done', '✅');
-
-                } catch (error) {
-                    console.error('Processing error:', error);
-                    throw new Error(error.message || 'Processing failed');
-                }
-            }
-
-            // --- Alle weiteren Methoden wie gehabt, nur Textausgaben ins Englische übersetzt ---
-            showPhoto(photo) {
-                if (this.ui.previewImg && this.ui.preview) {
-                    this.ui.previewImg.src = `data:image/jpeg;base64,${photo}`;
-                    this.ui.preview.classList.add('active');
-                }
-            }
-
-            showResults(data) {
-                this.ui.scanBtn.style.display = 'none';
-                this.ui.hint.style.display = 'none';
-                if (this.ui.resultTotal) {
-                    this.ui.resultTotal.textContent = `${data.total || '--'} ${data.currency || 'EUR'}`;
-                }
-                if (this.ui.resultMerchant) {
-                    this.ui.resultMerchant.textContent = `${data.merchant || 'Unknown'} • ${data.date || 'no date'}`;
-                }
-                if (this.ui.resultItems) {
-                    this.ui.resultItems.innerHTML = '';
-                    if (data.items && data.items.length > 0) {
-                        const maxItems = 12;
-                        data.items.slice(0, maxItems).forEach(item => {
-                            const li = document.createElement('li');
-                            li.textContent = item;
-                            this.ui.resultItems.appendChild(li);
-                        });
-                        if (data.items.length > maxItems) {
-                            const li = document.createElement('li');
-                            li.textContent = `... and ${data.items.length - maxItems} more`;
-                            li.style.fontStyle = 'italic';
-                            li.style.color = '#888';
-                            this.ui.resultItems.appendChild(li);
-                        }
-                        if (this.ui.results.scrollHeight > this.ui.results.clientHeight) {
-                            this.ui.scrollIndicator.classList.add('active');
-                        }
-                    } else {
-                        this.ui.resultItems.innerHTML = '<li>No individual items recognized.</li>';
-                    }
-                }
-                this.ui.results.classList.add('active');
-                this.ui.retryBtn.classList.add('active');
-                this.ui.sendBtn.classList.add('active');
-            }
-
-            reset() {
-                this.state.currentPhoto = null;
-                this.state.currentData = null;
-                this.state.rawText = null;
-                this.state.retryCount = 0;
-
-                this.ui.preview.classList.remove('active');
-                this.ui.results.classList.remove('active');
-                this.ui.scrollIndicator.classList.remove('active');
-                this.ui.scanBtn.style.display = 'flex';
-                this.ui.hint.style.display = 'block';
-                this.ui.retryBtn.classList.remove('active');
-                this.ui.sendBtn.classList.remove('active');
-                this.ui.content.querySelectorAll('.error').forEach(e => e.remove());
-
-                this.cleanup();
-                this.updateStatus('Ready', '🐰');
-            }
-
-            resetVisuals() {
-                this.ui.preview.classList.remove('active');
-                this.ui.results.classList.remove('active');
-                this.ui.scrollIndicator.classList.remove('active');
-                this.ui.scanBtn.style.display = 'none';
-                this.ui.hint.style.display = 'none';
-                this.ui.retryBtn.classList.remove('active');
-                this.ui.sendBtn.classList.remove('active');
-                this.ui.content.querySelectorAll('.error').forEach(e => e.remove());
-            }
-
-            showProcessing(text) {
-                if (this.ui.processText) this.ui.processText.textContent = text;
-                if (this.ui.processing) this.ui.processing.classList.add('active');
-            }
-
-            updateProcessing(text) {
-                if (this.ui.processText) this.ui.processText.textContent = text;
-            }
-
-            hideProcessing() {
-                if (this.ui.processing) this.ui.processing.classList.remove('active');
-            }
-
-            updateStatus(text, icon = '🐰') {
-                if (this.ui.statusText) this.ui.statusText.textContent = text;
-                if (this.ui.statusIcon) this.ui.statusIcon.textContent = icon;
-            }
-
-            showError(message, duration = 4000) {
-                const existingErrors = this.ui.content.querySelectorAll('.error');
-                existingErrors.forEach(e => e.remove());
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'error';
-                errorDiv.textContent = message;
-                if (this.ui.scanBtn.nextSibling) {
-                    this.ui.content.insertBefore(errorDiv, this.ui.scanBtn.nextSibling);
-                } else {
-                    this.ui.content.appendChild(errorDiv);
-                }
-                if (duration > 0) {
-                    setTimeout(() => errorDiv.remove(), duration);
-                }
-            }
-
-            wait(ms) {
-                return new Promise(resolve => setTimeout(resolve, ms));
-            }
-
-            timeout(ms, message) {
-                return new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error(message)), ms)
-                );
-            }
-
-            parseAIResponse(response) {
-                try {
-                    return JSON.parse(response);
-                } catch (e1) {
-                    try {
-                        const jsonMatch = response.match(/\{[\s\S]*\}/);
-                        if (jsonMatch) return JSON.parse(jsonMatch[0]);
-                    } catch (e2) {
-                        try {
-                            const cleanedResponse = response
-                                .replace(/```
-                                .replace(/```\n?/g, '')
-                                .trim();
-                            return JSON.parse(cleanedResponse);
-                        } catch (e3) {
-                            console.error('JSON Parse failed:', response);
-                            return {
-                                total: 'Unknown',
-                                currency: 'EUR',
-                                merchant: 'Not recognized',
-                                date: new Date().toISOString().split('T')[0],
-                                items: ['Could not fully extract data']
-                            };
-                        }
-                    }
-                }
-            }
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => new ReceiptScanner());
-        } else {
-            new ReceiptScanner();
-        }
-
-        document.addEventListener('touchmove', (e) => {
-            if (e.target.closest('.results')) return;
-            e.preventDefault();
-        }, { passive: false });
-    </script>
+    <script src="main.js"></script>
 </body>
 </html>
