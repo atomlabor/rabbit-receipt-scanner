@@ -34,7 +34,7 @@
             position: relative;
         }
         
-        /* Header - Changed from "Ready" to "rabbit receipt scanner" */
+        /* Header */
         .status-bar {
             height: 32px;
             background: #1a1a1a;
@@ -51,36 +51,6 @@
             font-weight: 500;
             color: #fff;
             text-align: center;
-        }
-        
-        /* Email input section - NOW AT THE TOP */
-        .email-section {
-            background: #1a1a1a;
-            padding: 8px 12px;
-            flex-shrink: 0;
-            border-bottom: 1px solid #333;
-        }
-        
-        .email-section label {
-            font-size: 9px;
-            color: #999;
-            display: block;
-            margin-bottom: 4px;
-        }
-        
-        .email-section input {
-            width: 100%;
-            padding: 6px 8px;
-            background: #000;
-            border: 1px solid #444;
-            border-radius: 4px;
-            color: #fff;
-            font-size: 11px;
-            outline: none;
-        }
-        
-        .email-section input:focus {
-            border-color: #ff6b00;
         }
         
         /* Content Area */
@@ -143,7 +113,7 @@
             object-fit: cover;
         }
         
-        /* Camera Overlay - "Tap to capture" at bottom when camera is active */
+        /* Camera Overlay */
         .camera-overlay {
             position: absolute;
             bottom: 0;
@@ -268,21 +238,13 @@
         .action-btn:active {
             transform: scale(0.98);
         }
-        
-        /* REMOVED: .hint class - no more "Click to scan" overlay */
     </style>
 </head>
 <body>
     <div class="app">
-        <!-- Header: Changed to "rabbit receipt scanner" -->
+        <!-- Header -->
         <div class="status-bar">
             <span class="status-text" id="statusText">rabbit receipt scanner</span>
-        </div>
-        
-        <!-- Email Input Section - MOVED TO TOP, above Scan Button -->
-        <div class="email-section">
-            <label for="emailInput">Email for results:</label>
-            <input type="email" id="emailInput" placeholder="your@email.com" autocomplete="email">
         </div>
         
         <div class="content" id="content">
@@ -294,7 +256,7 @@
             
             <!-- Camera Container with overlay at bottom -->
             <div class="camera-container" id="cameraContainer">
-                <video autoplay playsinline id="video"></video>
+                <video id="video" autoplay playsinline></video>
                 <div class="camera-overlay">Tap to capture</div>
             </div>
             
@@ -326,8 +288,6 @@
     
     <!-- Tesseract.js for OCR with German & English support -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-    <!-- SMTPjs for open-source email sending -->
-    <script src="https://smtpjs.com/v3/smtp.js"></script>
     <script src="main.js"></script>
 </body>
 </html>
