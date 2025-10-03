@@ -34,65 +34,98 @@
             position: relative;
         }
         
-        /* Status Bar */
+        /* Header - Changed from "Ready" to "rabbit receipt scanner" */
         .status-bar {
-            height: 22px;
-            background: #111;
+            height: 32px;
+            background: #1a1a1a;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-bottom: 1px solid #222;
+            padding: 0 12px;
             flex-shrink: 0;
+            border-bottom: 1px solid #333;
         }
         
         .status-text {
-            font-size: 10px;
-            color: #888;
+            font-size: 11px;
+            font-weight: 500;
+            color: #fff;
+            text-align: center;
+        }
+        
+        /* Email input section - NOW AT THE TOP */
+        .email-section {
+            background: #1a1a1a;
+            padding: 8px 12px;
+            flex-shrink: 0;
+            border-bottom: 1px solid #333;
+        }
+        
+        .email-section label {
+            font-size: 9px;
+            color: #999;
+            display: block;
+            margin-bottom: 4px;
+        }
+        
+        .email-section input {
+            width: 100%;
+            padding: 6px 8px;
+            background: #000;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 11px;
+            outline: none;
+        }
+        
+        .email-section input:focus {
+            border-color: #ff6b00;
         }
         
         /* Content Area */
         .content {
             flex: 1;
-            position: relative;
-            overflow: hidden;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
+            position: relative;
+            overflow: hidden;
         }
         
         /* Scan Button */
         .scan-btn {
-            background: #FF6B35;
+            background: #ff6b00;
             border: none;
-            color: #fff;
-            font-size: 14px;
-            font-weight: 600;
-            padding: 16px 24px;
-            border-radius: 8px;
-            cursor: pointer;
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 8px;
-            transition: all 0.2s;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+            gap: 4px;
         }
         
         .scan-btn:active {
             transform: scale(0.95);
-            background: #E55A2B;
         }
         
-        .scan-btn.hidden {
-            display: none;
-        }
-        
-        /* Updated: Use img instead of emoji for scan icon */
         .scan-icon {
-            width: 20px;
-            height: 20px;
-            object-fit: contain;
+            width: 36px;
+            height: 36px;
         }
         
-        /* Camera */
+        .scan-btn span {
+            font-size: 10px;
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        /* Camera Container */
         .camera-container {
             display: none;
             width: 100%;
@@ -110,6 +143,19 @@
             object-fit: cover;
         }
         
+        /* Camera Overlay - "Tap to capture" at bottom when camera is active */
+        .camera-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            text-align: center;
+            font-size: 11px;
+            color: #fff;
+        }
+        
         #canvas {
             display: none;
         }
@@ -119,13 +165,14 @@
             display: none;
             width: 100%;
             height: 100%;
+            position: relative;
         }
         
         .preview.active {
             display: block;
         }
         
-        #previewImg {
+        .preview img {
             width: 100%;
             height: 100%;
             object-fit: contain;
@@ -138,7 +185,6 @@
             height: 100%;
             padding: 12px;
             overflow-y: auto;
-            background: #0a0a0a;
         }
         
         .results.active {
@@ -146,40 +192,10 @@
         }
         
         .ocr-text {
-            font-size: 11px;
-            line-height: 1.5;
-            color: #ddd;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        
-        /* Email Input Section - NEW */
-        .email-section {
-            padding: 8px 12px;
-            background: #111;
-            border-top: 1px solid #222;
-        }
-        
-        .email-section label {
-            display: block;
-            font-size: 9px;
-            color: #888;
-            margin-bottom: 4px;
-        }
-        
-        .email-section input {
-            width: 100%;
-            padding: 6px 8px;
-            background: #000;
-            border: 1px solid #333;
-            border-radius: 4px;
-            color: #fff;
             font-size: 10px;
-            outline: none;
-        }
-        
-        .email-section input:focus {
-            border-color: #FF6B35;
+            line-height: 1.4;
+            color: #fff;
+            white-space: pre-wrap;
         }
         
         /* Processing Overlay */
@@ -191,7 +207,6 @@
             right: 0;
             bottom: 0;
             background: rgba(0, 0, 0, 0.9);
-            z-index: 100;
             align-items: center;
             justify-content: center;
             flex-direction: column;
@@ -206,9 +221,9 @@
             width: 32px;
             height: 32px;
             border: 3px solid #333;
-            border-top-color: #FF6B35;
+            border-top-color: #ff6b00;
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+            animation: spin 1s linear infinite;
         }
         
         @keyframes spin {
@@ -217,115 +232,102 @@
         
         .process-text {
             font-size: 11px;
-            color: #888;
+            color: #999;
         }
         
         /* Action Buttons */
         .actions {
-            height: 48px;
-            display: flex;
+            display: none;
             gap: 8px;
-            padding: 8px;
-            background: #111;
-            border-top: 1px solid #222;
-            flex-shrink: 0;
+            padding: 12px;
+            background: #1a1a1a;
+            border-top: 1px solid #333;
+        }
+        
+        .actions.active {
+            display: flex;
         }
         
         .action-btn {
             flex: 1;
-            background: #222;
-            border: 1px solid #333;
+            padding: 10px;
+            border: 1px solid #444;
+            background: #000;
             color: #fff;
-            font-size: 11px;
-            font-weight: 500;
             border-radius: 6px;
+            font-size: 11px;
             cursor: pointer;
             transition: all 0.2s;
-            display: none;
-        }
-        
-        .action-btn.active {
-            display: block;
-        }
-        
-        .action-btn:active {
-            transform: scale(0.95);
         }
         
         .action-btn.primary {
-            background: #FF6B35;
-            border-color: #FF6B35;
+            background: #ff6b00;
+            border-color: #ff6b00;
         }
         
-        .action-btn.primary:active {
-            background: #E55A2B;
+        .action-btn:active {
+            transform: scale(0.98);
         }
         
-        /* Hint - Updated: Removed PTT references */
-        .hint {
-            position: absolute;
-            bottom: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 10px;
-            color: #666;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 6px 12px;
-            border-radius: 12px;
-            text-align: center;
-            white-space: nowrap;
-        }
+        /* REMOVED: .hint class - no more "Click to scan" overlay */
     </style>
 </head>
 <body>
     <div class="app">
+        <!-- Header: Changed to "rabbit receipt scanner" -->
         <div class="status-bar">
-            <span class="status-text" id="statusText">Ready</span>
+            <span class="status-text" id="statusText">rabbit receipt scanner</span>
+        </div>
+        
+        <!-- Email Input Section - MOVED TO TOP, above Scan Button -->
+        <div class="email-section">
+            <label for="emailInput">Email for results:</label>
+            <input type="email" id="emailInput" placeholder="your@email.com" autocomplete="email">
         </div>
         
         <div class="content" id="content">
-            <!-- Updated: Replace emoji with r1-cam.png image -->
+            <!-- Scan Button -->
             <button class="scan-btn" id="scanBtn">
                 <img src="r1-cam.png" alt="Camera" class="scan-icon">
                 <span>Scan Receipt</span>
             </button>
             
+            <!-- Camera Container with overlay at bottom -->
             <div class="camera-container" id="cameraContainer">
                 <video autoplay playsinline id="video"></video>
+                <div class="camera-overlay">Tap to capture</div>
             </div>
             
             <canvas id="canvas"></canvas>
             
+            <!-- Preview -->
             <div class="preview" id="preview">
                 <img id="previewImg" alt="Preview">
             </div>
             
+            <!-- Results -->
             <div class="results" id="results">
                 <div class="ocr-text" id="ocrText">Scanning...</div>
             </div>
-            
-            <!-- Updated: Removed PTT hint -->
-            <div class="hint" id="hint">Click to scan</div>
         </div>
         
-        <!-- NEW: Email Input Section -->
-        <div class="email-section">
-            <label for="emailInput">Send results to:</label>
-            <input type="email" id="emailInput" placeholder="your@email.com" autocomplete="email">
-        </div>
-        
+        <!-- Processing Overlay -->
         <div class="processing" id="processing">
             <div class="spinner"></div>
             <div class="process-text" id="processText">Processing...</div>
         </div>
         
-        <div class="actions">
-            <!-- Updated: Removed PTT button text -->
+        <!-- Action Buttons -->
+        <div class="actions" id="actions">
             <button class="action-btn" id="retryBtn">New Scan</button>
             <button class="action-btn primary" id="captureBtn">Capture</button>
         </div>
     </div>
     
+    <!-- Tesseract.js for OCR with German & English support -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <!-- SMTPjs for open-source email sending -->
+    <script src="https://smtpjs.com/v3/smtp.js"></script>
     <script src="main.js"></script>
 </body>
 </html>
