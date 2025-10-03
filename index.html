@@ -34,24 +34,20 @@
             position: relative;
         }
         
-        /* Status Bar - Top */
+        /* Status Bar */
         .status-bar {
-            height: 24px;
-            background: #1a1a1a;
+            height: 22px;
+            background: #111;
             display: flex;
-            justify-content: center;
             align-items: center;
-            padding: 0 8px;
-            border-bottom: 1px solid #333;
+            justify-content: center;
+            border-bottom: 1px solid #222;
             flex-shrink: 0;
         }
         
         .status-text {
             font-size: 10px;
-            color: #FF6700;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            color: #888;
         }
         
         /* Content Area */
@@ -59,24 +55,53 @@
             flex: 1;
             position: relative;
             overflow: hidden;
-            background: #000;
-        }
-        
-        /* Camera Container */
-        .camera-container {
-            width: 100%;
-            height: 100%;
-            display: none;
-            position: absolute;
-            top: 0;
-            left: 0;
-            background: #000;
-        }
-        
-        .camera-container.active {
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+        
+        /* Scan Button */
+        .scan-btn {
+            background: #FF6B35;
+            border: none;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 16px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        
+        .scan-btn:active {
+            transform: scale(0.95);
+            background: #E55A2B;
+        }
+        
+        .scan-btn.hidden {
+            display: none;
+        }
+        
+        /* Updated: Use img instead of emoji for scan icon */
+        .scan-icon {
+            width: 20px;
+            height: 20px;
+            object-fit: contain;
+        }
+        
+        /* Camera */
+        .camera-container {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        .camera-container.active {
+            display: block;
         }
         
         #video {
@@ -91,100 +116,86 @@
         
         /* Preview */
         .preview {
+            display: none;
             width: 100%;
             height: 100%;
-            display: none;
-            position: absolute;
-            top: 0;
-            left: 0;
-            background: #000;
         }
         
         .preview.active {
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: block;
         }
         
         #previewImg {
-            max-width: 100%;
-            max-height: 100%;
+            width: 100%;
+            height: 100%;
             object-fit: contain;
         }
         
         /* Results */
         .results {
+            display: none;
             width: 100%;
             height: 100%;
-            display: none;
-            flex-direction: column;
-            padding: 12px 10px;
-            background: #0a0a0a;
+            padding: 12px;
             overflow-y: auto;
+            background: #0a0a0a;
         }
         
         .results.active {
-            display: flex;
+            display: block;
         }
         
         .ocr-text {
             font-size: 11px;
-            color: #ddd;
             line-height: 1.5;
+            color: #ddd;
             white-space: pre-wrap;
-            word-break: break-word;
+            word-wrap: break-word;
         }
         
-        /* Scan Button */
-        .scan-btn {
-            width: 140px;
-            height: 140px;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(135deg, #FF6700 0%, #FF8533 100%);
-            border: none;
-            border-radius: 24px;
+        /* Email Input Section - NEW */
+        .email-section {
+            padding: 8px 12px;
+            background: #111;
+            border-top: 1px solid #222;
+        }
+        
+        .email-section label {
+            display: block;
+            font-size: 9px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        
+        .email-section input {
+            width: 100%;
+            padding: 6px 8px;
+            background: #000;
+            border: 1px solid #333;
+            border-radius: 4px;
             color: #fff;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            box-shadow: 0 6px 20px rgba(255, 103, 0, 0.5);
-            transition: transform 0.1s;
+            font-size: 10px;
+            outline: none;
         }
         
-        .scan-btn:active {
-            transform: translate(-50%, -50%) scale(0.95);
-        }
-        
-        .scan-btn.hidden {
-            display: none;
-        }
-        
-        .scan-icon {
-            font-size: 48px;
-            line-height: 1;
+        .email-section input:focus {
+            border-color: #FF6B35;
         }
         
         /* Processing Overlay */
         .processing {
+            display: none;
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.95);
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
             z-index: 100;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
         }
         
         .processing.active {
@@ -192,93 +203,77 @@
         }
         
         .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #222;
-            border-top: 4px solid #FF6700;
+            width: 32px;
+            height: 32px;
+            border: 3px solid #333;
+            border-top-color: #FF6B35;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
         
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            to { transform: rotate(360deg); }
         }
         
         .process-text {
-            margin-top: 16px;
-            font-size: 12px;
-            color: #999;
-            text-align: center;
+            font-size: 11px;
+            color: #888;
         }
         
-        /* Action Buttons - Bottom */
+        /* Action Buttons */
         .actions {
             height: 48px;
             display: flex;
-            gap: 6px;
-            padding: 6px;
-            background: #1a1a1a;
-            border-top: 1px solid #333;
+            gap: 8px;
+            padding: 8px;
+            background: #111;
+            border-top: 1px solid #222;
             flex-shrink: 0;
         }
         
         .action-btn {
             flex: 1;
-            height: 36px;
-            background: #2a2a2a;
-            border: 1px solid #444;
-            border-radius: 12px;
+            background: #222;
+            border: 1px solid #333;
             color: #fff;
-            font-size: 12px;
-            font-weight: 600;
+            font-size: 11px;
+            font-weight: 500;
+            border-radius: 6px;
             cursor: pointer;
+            transition: all 0.2s;
             display: none;
-            transition: all 0.1s;
-        }
-        
-        .action-btn:active {
-            transform: scale(0.95);
-            background: #333;
         }
         
         .action-btn.active {
             display: block;
         }
         
+        .action-btn:active {
+            transform: scale(0.95);
+        }
+        
         .action-btn.primary {
-            background: #FF6700;
-            border: 1px solid #FF6700;
+            background: #FF6B35;
+            border-color: #FF6B35;
         }
         
         .action-btn.primary:active {
-            background: #e55d00;
+            background: #E55A2B;
         }
         
-        /* Hint */
+        /* Hint - Updated: Removed PTT references */
         .hint {
             position: absolute;
-            bottom: 12px;
+            bottom: 60px;
             left: 50%;
             transform: translateX(-50%);
             font-size: 10px;
             color: #666;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 6px 12px;
+            border-radius: 12px;
             text-align: center;
             white-space: nowrap;
-        }
-        
-        /* Scrollbar */
-        .results::-webkit-scrollbar {
-            width: 4px;
-        }
-        
-        .results::-webkit-scrollbar-track {
-            background: #111;
-        }
-        
-        .results::-webkit-scrollbar-thumb {
-            background: #333;
-            border-radius: 2px;
         }
     </style>
 </head>
@@ -289,8 +284,9 @@
         </div>
         
         <div class="content" id="content">
+            <!-- Updated: Replace emoji with r1-cam.png image -->
             <button class="scan-btn" id="scanBtn">
-                <span class="scan-icon">📸</span>
+                <img src="r1-cam.png" alt="Camera" class="scan-icon">
                 <span>Scan Receipt</span>
             </button>
             
@@ -308,7 +304,14 @@
                 <div class="ocr-text" id="ocrText">Scanning...</div>
             </div>
             
-            <div class="hint" id="hint">Press PTT to scan</div>
+            <!-- Updated: Removed PTT hint -->
+            <div class="hint" id="hint">Click to scan</div>
+        </div>
+        
+        <!-- NEW: Email Input Section -->
+        <div class="email-section">
+            <label for="emailInput">Send results to:</label>
+            <input type="email" id="emailInput" placeholder="your@email.com" autocomplete="email">
         </div>
         
         <div class="processing" id="processing">
@@ -317,6 +320,7 @@
         </div>
         
         <div class="actions">
+            <!-- Updated: Removed PTT button text -->
             <button class="action-btn" id="retryBtn">New Scan</button>
             <button class="action-btn primary" id="captureBtn">Capture</button>
         </div>
