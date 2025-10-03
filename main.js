@@ -1,4 +1,4 @@
-// Rabbit Receipt Scanner - Enhanced version with Rabbit LLM mail support
+// Rabbit Receipt Scanner - Clean version with Rabbit LLM mail support
 // OCR supports both German and English
 // TRIGGER: After successful OCR scan, automatically sends receipt via Rabbit LLM to user's email
 (function() {
@@ -8,15 +8,17 @@
   let stream = null;
   let isScanning = false;
   let currentState = 'idle'; // idle, camera, preview, results
-  let capturedImageData = null; // Store captured image for email attachment
-  let ocrResultText = ''; // Store OCR text for email
+  let capturedImageData = null;
+  let ocrResultText = '';
   
   // DOM elements
   let statusText, scanBtn, cameraContainer, video, canvas, preview, previewImg;
   let results, ocrText, processing, processText, retryBtn, captureBtn, actions;
   
-  // Initialize
+  // Initialize when DOM is ready
   function init() {
+    console.log('Initializing Receipt Scanner...');
+    
     // Get DOM elements
     statusText = document.getElementById('statusText');
     scanBtn = document.getElementById('scanBtn');
@@ -33,18 +35,32 @@
     captureBtn = document.getElementById('captureBtn');
     actions = document.getElementById('actions');
     
+    // Verify scan button exists
+    if (!scanBtn) {
+      console.error('Scan button not found!');
+      return;
+    }
+    
+    console.log('Scan button found, attaching event listeners...');
+    
     // Event listeners
-    scanBtn.addEventListener('click', startCamera);
+    scanBtn.addEventListener('click', function(e) {
+      console.log('Scan button clicked!');
+      e.preventDefault();
+      startCamera();
+    });
+    
     video.addEventListener('click', captureImage);
     cameraContainer.addEventListener('click', captureImage);
     captureBtn.addEventListener('click', captureImage);
     retryBtn.addEventListener('click', reset);
     
-    console.log('Receipt Scanner initialized');
+    console.log('Receipt Scanner initialized successfully');
   }
   
   // Start camera
   async function startCamera() {
+    console.log('Starting camera...');
     try {
       currentState = 'camera';
       updateUI();
@@ -60,7 +76,7 @@
       video.srcObject = stream;
       await video.play();
       
-      console.log('Camera started');
+      console.log('Camera started successfully');
     } catch (err) {
       console.error('Error accessing camera:', err);
       alert('Could not access camera: ' + err.message);
@@ -72,27 +88,22 @@
   function captureImage() {
     if (currentState !== 'camera' || isScanning) return;
     
+    console.log('Capturing image...');
     try {
-      // Set canvas dimensions to match video
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
-      // Draw video frame to canvas
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0);
       
-      // Get image data
       capturedImageData = canvas.toDataURL('image/jpeg', 0.92);
       
-      // Stop camera
       stopCamera();
       
-      // Show preview
       previewImg.src = capturedImageData;
       currentState = 'preview';
       updateUI();
       
-      // Process OCR
       processOCR(capturedImageData);
     } catch (err) {
       console.error('Error capturing image:', err);
@@ -105,12 +116,12 @@
     if (isScanning) return;
     isScanning = true;
     
+    console.log('Starting OCR processing...');
     try {
       currentState = 'processing';
       updateUI();
       processText.textContent = 'Scanning receipt...';
       
-      // Initialize Tesseract with German and English language support
       const worker = await Tesseract.createWorker(['deu', 'eng'], 1, {
         logger: m => {
           if (m.status === 'recognizing text') {
@@ -120,14 +131,11 @@
         }
       });
       
-      // Perform OCR
       const { data } = await worker.recognize(imageData);
       ocrResultText = data.text;
       
-      // Clean up worker
       await worker.terminate();
       
-      // Interpret and format the results
       const interpretedText = interpretReceipt(ocrResultText);
       ocrText.innerHTML = interpretedText;
       
@@ -135,7 +143,7 @@
       updateUI();
       isScanning = false;
       
-      // TRIGGER: Automatically send receipt via Rabbit LLM after successful scan
+      console.log('OCR completed, sending via Rabbit Mail...');
       await sendReceiptViaRabbitMail(ocrResultText);
       
     } catch (err) {
@@ -155,7 +163,6 @@
     
     let formatted = '<div style="font-size: 10px; line-height: 1.5;">';
     
-    // Extract key information
     const lines = text.split('\n').filter(line => line.trim().length > 0);
     
     // Look for total amount (in German and English)
@@ -179,8 +186,8 @@
     
     // Look for date (multiple formats)
     const datePatterns = [
-      /\d{1,2}[.\/\-]\d{1,2}[.\/\-]\d{2,4}/,
-      /\d{2,4}[.\/\-]\d{1,2}[.\/\-]\d{1,2}/
+      /\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4}/,
+      /\d{2,4}[\.\/-]\d{1,2}[\.\/-]\d{1,2}/
     ];
     
     let foundDate = null;
@@ -219,16 +226,13 @@
   }
   
   /**
-   * TRIGGER DOCUMENTATION:
-   * Sends receipt via Rabbit LLM mail after successful OCR scan.
-   * This function is automatically called when OCR processing completes.
+   * TRIGGER: Sends receipt via Rabbit LLM mail after successful OCR scan.
+   * Automatically called when OCR processing completes.
    * 
-   * Uses rabbit.llm.sendMailToSelf() API to send:
+   * Uses rabbit.llm.sendMailToSelf() API:
    * - Subject: Receipt scan with date/time
-   * - Body: Formatted OCR text with extracted information (total, date, etc.)
+   * - Body: Formatted OCR text with extracted information
    * - Attachment: Original scanned receipt image as JPEG
-   * 
-   * @param {string} ocrText - The recognized text from the receipt
    */
   async function sendReceiptViaRabbitMail(ocrText) {
     try {
@@ -243,11 +247,9 @@
         return;
       }
       
-      // Prepare email content
       const timestamp = new Date().toLocaleString('de-DE');
       const subject = `Receipt Scan - ${timestamp}`;
       
-      // Create plain text body with formatted OCR results
       const body = `Receipt scanned on ${timestamp}\n\n` +
         `--- OCR TEXT ---\n${ocrText}\n\n` +
         `This receipt was automatically scanned and sent by Rabbit Receipt Scanner.`;
@@ -256,12 +258,11 @@
       await rabbit.llm.sendMailToSelf({
         subject: subject,
         body: body,
-        attachment: capturedImageData  // Base64 JPEG image
+        attachment: capturedImageData
       });
       
       console.log('Receipt sent successfully via Rabbit LLM');
       
-      // Show success indicator
       statusText.textContent = '✓ Receipt sent!';
       setTimeout(() => {
         statusText.textContent = 'rabbit receipt scanner';
