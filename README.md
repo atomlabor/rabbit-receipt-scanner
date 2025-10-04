@@ -1,4 +1,4 @@
-# 🧾 Rabbit Receipt Scanner
+# 🧾 Rabbit Receipt Scanner | WIP
 
 Ein modernes Web-Tool zum Scannen und Verarbeiten von Belegen für das Rabbit R1-Gerät mit OCR-Unterstützung und automatischem E-Mail-Versand via Rabbit LLM.
 
