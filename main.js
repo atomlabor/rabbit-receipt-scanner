@@ -1,30 +1,15 @@
-// Rabbit Receipt Scanner - Stable version with robust Tesseract debug and errors
+// Rabbit Receipt Scanner - Fixed Tesseract.js CDN/Worker issue
 // OCR supports both German and English
 // TRIGGER: After successful OCR scan, automatically sends receipt via Rabbit LLM to user's email
 (function() {
   'use strict';
   function errToString(err) { try { return (err && (err.message || (err.toString && err.toString()))) || JSON.stringify(err) || 'Unknown error'; } catch { return 'Unknown error'; } }
-  async function isReachable(url) {
-    try { const res = await fetch(url, { method: 'HEAD', mode: 'no-cors' }); console.log('[CDN][check] HEAD', url, '->', res && (res.status || 'no-cors')); return true; } catch (e) { console.warn('[CDN][check] Unreachable:', url, errToString(e)); return false; }
-  }
-  async function resolveTesseractPaths() {
-    const ver = '4.0.3';
-    const distCdn = `https://cdn.jsdelivr.net/npm/tesseract.js@${ver}/dist`;
-    const langCdn = 'https://cdn.jsdelivr.net/gh/tesseract-ocr/tessdata_fast@4.1.0';
-    const cdn = { corePath: `${distCdn}/tesseract-core.wasm.js`, workerPath: `${distCdn}/worker.min.js`, langPath: `${langCdn}` };
-    console.log('[CDN] Preferred paths:', cdn);
-    const [coreOk, workerOk, langOk] = await Promise.all([
-      isReachable(cdn.corePath), isReachable(cdn.workerPath), isReachable(`${cdn.langPath}/deu.traineddata`)
-    ]);
-    if (coreOk && workerOk && langOk) { console.log('[CDN] Using CDN assets for Tesseract'); return cdn; }
-    const local = { corePath: './tesseract/tesseract-core.wasm.js', workerPath: './tesseract/worker.min.js', langPath: './tesseract/lang' };
-    console.warn('[CDN] Falling back to local assets:', local);
-    return local;
-  }
+  
   let stream = null, isScanning = false, currentState = 'idle';
   let capturedImageData = null, ocrResultText = '';
   let statusText, scanBtn, cameraContainer, video, canvas, preview, previewImg;
   let results, ocrText, processing, processText, retryBtn, captureBtn, actions;
+  
   function init() {
     console.log('[INIT] Initializing Receipt Scanner...');
     statusText = document.getElementById('statusText');
@@ -49,6 +34,7 @@
     retryBtn && retryBtn.addEventListener('click', reset);
     console.log('[INIT] Receipt Scanner initialized successfully');
   }
+  
   async function startCamera() {
     console.log('[CAMERA] Starting camera...');
     try {
@@ -57,6 +43,7 @@
       video.srcObject = stream; await video.play(); console.log('[CAMERA] Camera started successfully');
     } catch (err) { const msg = errToString(err); console.error('[CAMERA] Error accessing camera:', msg, err); alert('Could not access camera: ' + msg); reset(); }
   }
+  
   function captureImage() {
     if (currentState !== 'camera' || isScanning) return;
     console.log('[CAPTURE] Capturing image...');
@@ -68,24 +55,64 @@
       stopCamera(); previewImg.src = capturedImageData; currentState = 'preview'; updateUI(); processOCR(capturedImageData);
     } catch (err) { const msg = errToString(err); console.error('[CAPTURE] Error capturing image:', msg, err); alert('Error capturing image: ' + msg); }
   }
+  
   async function processOCR(imageData) {
     if (isScanning) return; isScanning = true; console.log('[OCR] Starting OCR processing...');
     try {
       currentState = 'processing'; updateUI(); if (processText) processText.textContent = 'Initializing OCR...';
-      const paths = await resolveTesseractPaths(); console.log('[OCR] Resolved Tesseract paths:', paths);
-      console.log('[OCR] Creating Tesseract worker...');
-      const worker = await Tesseract.createWorker({
-        corePath: paths.corePath, workerPath: paths.workerPath, langPath: paths.langPath,
-        logger: m => { try { if (m && m.status) { if (m.status !== 'recognizing text') { const pct = typeof m.progress === 'number' ? Math.round(m.progress * 100) + '%' : ''; console.log('[OCR][worker]', m.status, pct); if (processText) processText.textContent = m.status + (pct ? ' ' + pct : ''); } else { const progress = Math.round((m.progress || 0) * 100); if (processText) processText.textContent = `Processing: ${progress}%`; } } else { console.log('[OCR][worker]', m); } } catch (e) { console.warn('[OCR][logger] Failed to log progress:', errToString(e)); } }
+      console.log('[OCR] Creating Tesseract worker with version 5.1.1...');
+      
+      // Use Tesseract.js v5 simplified API - supports both German and English
+      const worker = await Tesseract.createWorker('deu+eng', 1, {
+        workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+        langPath: 'https://cdn.jsdelivr.net/npm/tessdata-fast@4.1.0',
+        corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.0',
+        logger: m => { 
+          try { 
+            if (m && m.status) { 
+              if (m.status !== 'recognizing text') { 
+                const pct = typeof m.progress === 'number' ? Math.round(m.progress * 100) + '%' : ''; 
+                console.log('[OCR][worker]', m.status, pct); 
+                if (processText) processText.textContent = m.status + (pct ? ' ' + pct : ''); 
+              } else { 
+                const progress = Math.round((m.progress || 0) * 100); 
+                if (processText) processText.textContent = `Processing: ${progress}%`; 
+              } 
+            } else { 
+              console.log('[OCR][worker]', m); 
+            } 
+          } catch (e) { 
+            console.warn('[OCR][logger] Failed to log progress:', errToString(e)); 
+          } 
+        }
       });
-      console.log('[OCR] Worker created');
-      try { console.log('[OCR] Loading language deu from', paths.langPath); await worker.loadLanguage && worker.loadLanguage('deu'); console.log('[OCR] Initializing language deu'); await worker.initialize && worker.initialize('deu'); } catch (initErr) { console.warn('[OCR] load/initialize failed:', errToString(initErr)); }
-      console.log('[OCR] Calling worker.recognize...');
-      const { data } = await worker.recognize(imageData); ocrResultText = (data && data.text) || ''; console.log('[OCR] Recognize finished. Text length:', ocrResultText.length);
-      try { console.log('[OCR] Terminating worker...'); await worker.terminate(); console.log('[OCR] Worker terminated'); } catch (termErr) { console.warn('[OCR] Worker termination failed:', errToString(termErr)); }
-      const interpretedText = interpretReceipt(ocrResultText); if (ocrText) ocrText.innerHTML = interpretedText; currentState = 'results'; updateUI(); isScanning = false; console.log('[OCR] Completed, sending via Rabbit Mail...'); await sendReceiptViaRabbitMail(ocrResultText);
-    } catch (err) { const msg = errToString(err); console.error('[OCR] Error during OCR:', msg, err); if (ocrText) ocrText.textContent = 'Error: Could not process receipt. ' + msg; currentState = 'results'; updateUI(); isScanning = false; }
+      
+      console.log('[OCR] Worker created, calling worker.recognize...');
+      const { data } = await worker.recognize(imageData); 
+      ocrResultText = (data && data.text) || ''; 
+      console.log('[OCR] Recognize finished. Text length:', ocrResultText.length);
+      
+      try { 
+        console.log('[OCR] Terminating worker...'); 
+        await worker.terminate(); 
+        console.log('[OCR] Worker terminated'); 
+      } catch (termErr) { 
+        console.warn('[OCR] Worker termination failed:', errToString(termErr)); 
+      }
+      
+      const interpretedText = interpretReceipt(ocrResultText); 
+      if (ocrText) ocrText.innerHTML = interpretedText; 
+      currentState = 'results'; updateUI(); isScanning = false; 
+      console.log('[OCR] Completed, sending via Rabbit Mail...'); 
+      await sendReceiptViaRabbitMail(ocrResultText);
+    } catch (err) { 
+      const msg = errToString(err); 
+      console.error('[OCR] Error during OCR:', msg, err); 
+      if (ocrText) ocrText.textContent = 'Error: Could not process receipt. ' + msg; 
+      currentState = 'results'; updateUI(); isScanning = false; 
+    }
   }
+  
   function interpretReceipt(text) {
     try {
       if (!text || text.trim().length === 0) { return '<span style="color: #ff6b00;">No text detected. Please try again.</span>'; }
@@ -96,8 +123,8 @@
       const datePatterns = [/\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4}/, /\d{2,4}[\.\/-]\d{1,2}[\.\/-]\d{1,2}/];
       let foundDate = null; for (const pattern of datePatterns) { for (const line of lines) { const match = line.match(pattern); if (match) { foundDate = match[0]; break; } } if (foundDate) break; }
       formatted += '<div style="margin-bottom: 12px; padding: 8px; background: #222; border-radius: 4px;">';
-      if (foundTotal) { formatted += `<div style=\"color: #ff6b00; font-weight: bold; font-size: 11px;\">Total: ${foundTotal}</div>`; }
-      if (foundDate) { formatted += `<div style=\"color: #999; font-size: 9px; margin-top: 4px;\">Date: ${foundDate}</div>`; }
+      if (foundTotal) { formatted += `<div style="color: #ff6b00; font-weight: bold; font-size: 11px;">Total: ${foundTotal}</div>`; }
+      if (foundDate) { formatted += `<div style="color: #aaa; font-size: 9px; margin-top: 4px;">Date: ${foundDate}</div>`; }
       formatted += '</div>';
       formatted += '<div style="color: #ccc; white-space: pre-wrap; font-size: 9px;">';
       formatted += text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -105,6 +132,7 @@
       return formatted;
     } catch (err) { const msg = errToString(err); console.error('[INTERPRET] Error interpreting text:', msg, err); return 'Error interpreting OCR result: ' + msg; }
   }
+  
   async function sendReceiptViaRabbitMail(ocrTextValue) {
     try {
       if (processText) processText.textContent = 'Sending via Rabbit Mail...'; processing && processing.classList.add('active');
@@ -113,8 +141,11 @@
       console.log('[MAIL] Calling rabbit.llm.sendMailToSelf'); await rabbit.llm.sendMailToSelf({ subject, body, attachment: capturedImageData }); console.log('[MAIL] Receipt sent successfully via Rabbit LLM'); if (statusText) statusText.textContent = '✓ Receipt sent!'; setTimeout(() => { if (statusText) statusText.textContent = 'rabbit receipt scanner'; }, 3000); processing && processing.classList.remove('active');
     } catch (err) { const msg = errToString(err); console.error('[MAIL] Rabbit Mail error:', msg, err); alert('Could not send via Rabbit Mail: ' + msg); processing && processing.classList.remove('active'); }
   }
+  
   function stopCamera() { try { if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; if (video) video.srcObject = null; } } catch (err) { console.warn('[CAMERA] stopCamera error:', errToString(err)); } }
+  
   function reset() { stopCamera(); isScanning = false; currentState = 'idle'; capturedImageData = null; ocrResultText = ''; if (ocrText) ocrText.textContent = 'Scanning...'; updateUI(); }
+  
   function updateUI() {
     try {
       if (scanBtn) scanBtn.style.display = 'none';
@@ -132,5 +163,6 @@
       }
     } catch (err) { console.warn('[UI] updateUI error:', errToString(err)); }
   }
+  
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
 })();
