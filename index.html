@@ -42,7 +42,10 @@
     </div>
   </div>
   <div class="content">
-    <button id="scanBtn" aria-label="Scan"><img src="r1-cam.png" alt="Scan" /></button>
+    <button id="scanBtn">
+  <img src="r1-cam.png" alt="Scan">
+  <span id="labelScan">Scannen</span>
+</button>
     <div id="cameraContainer">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="canvas" style="display:none;"></canvas>
