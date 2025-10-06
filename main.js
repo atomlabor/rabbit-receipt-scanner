@@ -262,18 +262,50 @@
   }
 
   function interpretReceipt(text) {
-    try {
-      if (!text || text.trim().length === 0) { return '<span style="color: #ff6b00;">No text detected. Please try again.</span>'; }
-      let formatted = '<div style="font-size: 10px; line-height: 1.5;">';
-      const lines = text.split('\n').filter(line => line.trim().length > 0);
-      const totalPatterns = [/(?:total|gesamt|summe|betrag).*?(\d+[.,]\d{2})/i, /(\d+[.,]\d{2}).*?(?:€|EUR|eur)/i, /(?:€|EUR)\s*(\d+[.,]\d{2})/i];
-      let foundTotal = null; for (const pattern of totalPatterns) { for (const line of lines) { const match = line.match(pattern); if (match) { foundTotal = match[1] || match[0]; break; } } if (foundTotal) break; }
-      const datePatterns = [/\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4}/, /\d{2,4}[\.\/-]\d{1,2}[\.
-
-
-                            if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
+  try {
+    if (!text || text.trim().length === 0) {
+      return '<span style="color: #ff6b00;">No text detected. Please try again.</span>';
+    }
+    let formatted = '<div style="font-size: 10px; line-height: 1.5;">';
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
+    const totalPatterns = [
+      /(?:total|gesamt|summe|betrag).*?(\d+[.,]\d{2})/i,
+      /(\d+[.,]\d{2}).*?(?:€|EUR|eur)/i,
+      /(?:€|EUR)\s*(\d+[.,]\d{2})/i
+    ];
+    let foundTotal = null;
+    for (const pattern of totalPatterns) {
+      for (const line of lines) {
+        const match = line.match(pattern);
+        if (match) {
+          foundTotal = match[1] || match[0];
+          break;
+        }
+      }
+      if (foundTotal) break;
+    }
+    const datePatterns = [
+      /\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4}/,
+      /\d{2,4}[\.\/-]\d{1,2}[\.\/-]\d{1,2}/
+    ];
+    let foundDate = null;
+    for (const pattern of datePatterns) {
+      for (const line of lines) {
+        const match = line.match(pattern);
+        if (match) {
+          foundDate = match[0];
+          break;
+        }
+      }
+      if (foundDate) break;
+    }
+    if (foundTotal) formatted += `<div style="color:#06cd98;">Total: ${foundTotal}</div>`;
+    if (foundDate) formatted += `<div style="color:#bd8cff;">Date: ${foundDate}</div>`;
+    formatted += '<br><span style="color: #fff;">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span></div>';
+    return formatted;
+  } catch (err) {
+    const msg = (err && (err.message || err.toString && err.toString())) || JSON.stringify(err) || 'Unknown error';
+    console.error('[INTERPRET] Error interpreting text:', msg);
+    return 'Error interpreting OCR result: ' + msg;
+  }
 }
-
