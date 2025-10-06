@@ -2,12 +2,10 @@
 // Features: Camera capture, Tesseract OCR (deu+eng), Rabbit LLM Mail, direct UI output
 (function () {
   'use strict';
-
   // === STATE & DOM
   let stream = null, isScanning = false, currentState = 'idle', zoom = 1.0;
   const ZOOM_MIN = 0.75, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
   let scanBtn, cameraContainer, video, canvas, previewImg, results, processing, processText, retryBtn;
-
   // Storage (Rabbit R1 preferred, fallback localStorage)
   const storage = {
     async set(key, value) {
@@ -28,7 +26,6 @@
       return null;
     }
   };
-
   // === INIT & EVENTS
   function init() {
     scanBtn = document.getElementById('scanBtn');
@@ -40,12 +37,10 @@
     processing = document.getElementById('processing');
     processText = document.getElementById('processText');
     retryBtn = document.getElementById('retryBtn');
-
     scanBtn && scanBtn.addEventListener('click', startCamera);
     video && video.addEventListener('click', captureImage);
     cameraContainer && cameraContainer.addEventListener('click', captureImage);
     retryBtn && retryBtn.addEventListener('click', reset);
-
     document.addEventListener('wheel', ev => {
       if (currentState === 'camera' || currentState === 'preview') applyZoom(ev.deltaY < 0 ? 1 : -1);
       else if (currentState === 'results' && results) results.scrollTop += ev.deltaY;
@@ -58,11 +53,9 @@
     } else {
       document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); if (currentState === 'camera') captureImage(); else if (currentState === 'idle') startCamera(); } });
     }
-
     restorePrevImage();
     updateUI();
   }
-
   function applyZoom(delta) {
     const before = zoom;
     zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom + delta * ZOOM_STEP));
@@ -70,7 +63,6 @@
     if (previewImg && currentState === 'preview') previewImg.style.transform = `scale(${zoom})`;
     if (before !== zoom) console.log('[ZOOM]', zoom.toFixed(2));
   }
-
   // === CAMERA
   async function startCamera() {
     try {
@@ -87,7 +79,6 @@
   function stopCamera() {
     try { if (stream) stream.getTracks().forEach(t => t.stop()); if (video) video.srcObject = null; } catch (e) { console.warn('[CAMERA] stop error', e); }
   }
-
   // === CAPTURE
   function captureImage() {
     if (currentState !== 'camera' || isScanning) return;
@@ -101,20 +92,18 @@
     currentState = 'preview'; updateUI();
     processOCR(image);
   }
-
   // === OCR
   async function processOCR(imgDataUrl) {
     if (isScanning) return;
     isScanning = true;
     currentState = 'processing'; updateUI();
     if (processText) processText.textContent = 'OCR wird initialisiert ...';
-
     // Preprocess to improve OCR quality
     const preprocessed = await preprocessImage(imgDataUrl);
     const inputImg = preprocessed || imgDataUrl;
-
     try {
-      const worker = await Tesseract.createWorker(['deu', 'eng'], 1, {
+      const worker = await Tesseract.createWorker('deu', 1, {
+        cacheMethod: 'none',
         workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
         langPath: 'https://cdn.jsdelivr.net/npm/tessdata-fast@4.1.0',
         corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.0',
@@ -122,16 +111,12 @@
       });
       const result = await worker.recognize(inputImg);
       await worker.terminate();
-
       const ocrText = (result && result.data && result.data.text) ? result.data.text : '';
-
       // Show exact OCR text immediately with highlights
       showResult(ocrText);
       currentState = 'results'; updateUI();
-
       // Persist last OCR text
       await storage.set('r1.lastOCR', ocrText);
-
       // Immediately send via Rabbit internal API
       await sendReceiptViaRabbitMail(ocrText, imgDataUrl);
     } catch (err) {
@@ -142,7 +127,6 @@
       isScanning = false;
     }
   }
-
   // === Preprocessing (simple grayscale + threshold)
   function preprocessImage(imgDataUrl) {
     return new Promise(resolve => {
@@ -167,7 +151,6 @@
       img.src = imgDataUrl;
     });
   }
-
   // === Result rendering (exact text + highlights)
   function showResult(text) {
     const lines = (text || '').split('\n').filter(l => l.trim());
@@ -181,7 +164,6 @@
     if (results) results.innerHTML = html;
     if (previewImg && previewImg.src) previewImg.style.display = 'block';
   }
-
   // === Rabbit internal mail
   async function sendReceiptViaRabbitMail(text, img) {
     if (window.rabbit && rabbit.llm && typeof rabbit.llm.sendMailToSelf === 'function') {
@@ -199,7 +181,6 @@
       console.log('[MAIL] Rabbit LLM API not available (browser mode)');
     }
   }
-
   // === UI
   function updateUI() {
     if (!scanBtn || !cameraContainer || !processing || !results) return;
@@ -209,12 +190,10 @@
     results.style.display = (currentState === 'results') ? 'block' : 'none';
     if (previewImg) previewImg.style.display = (currentState === 'preview' || currentState === 'results') && previewImg.src ? 'block' : 'none';
   }
-
   async function restorePrevImage() {
     const lastImg = await storage.get('r1.lastImage');
     if (lastImg && previewImg) previewImg.src = lastImg;
   }
-
   function reset() {
     stopCamera();
     currentState = 'idle';
@@ -223,7 +202,6 @@
     if (results) results.innerHTML = '';
     updateUI();
   }
-
   // === Boot
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
