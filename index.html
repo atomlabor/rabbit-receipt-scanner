@@ -1,64 +1,113 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=240, initial-scale=1.0, viewport-fit=cover" />
-  <title>rabbit receipt scanner</title>
-  <style>
-    body { background: #000; color: #fff; margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    .header { background:#222; color:#ffa500; height:32px; line-height:32px; text-align:center; font-weight:600; font-size:13px; }
-    .bar { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; }
-    select { background:#222; color:#fff; border:1px solid #333; border-radius:6px; padding:4px 6px; font-size:12px; }
-    .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
-    #scanBtn { width:calc(100% - 24px); max-width:216px; height:54px; background:#ff6b00; border:none; border-radius:12px; margin:16px auto 10px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px #ff6b0040; gap:8px; font-size:15px; font-weight:600; color:#fff; cursor:pointer; }
-    #scanBtn img { height:110px; width:110px; }
-    #cameraContainer { display:none; flex-direction:column; align-items:center; }
-    video { width:200px; height:132px; border:2px solid #ffa500; border-radius:10px; background:#222; object-fit:cover; }
-    #hintTap { color:#ffa500; font-size:14px; margin-top:8px; }
-    #processing { color:#ffa500; text-align:center; margin-top:8px; display:none; }
-    #previewImg { display:none; margin:10px auto; max-width:200px; border-radius:10px; }
-    #results { display:none; background:#23232c; border-radius:10px; margin:12px; padding:10px 12px; max-height:110px; overflow:auto; }
-    .result-highlight { font-size:13px; color:#06cd98; margin-bottom:4px; }
-    .result-date { font-size:13px; color:#bd8cff; margin-bottom:8px; }
-    .success { color:#66ff99; margin-top:8px; }
-    /* STYLES FÜR DEN ZURÜCKSETZ-BUTTON */
-    #retryBtn { width:calc(100% - 24px); max-width:216px; height:40px; background:#222; border:1px solid #333; border-radius:12px; margin:10px auto 16px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500; color:#fff; cursor:pointer; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=240, initial-scale=1.0, viewport-fit=cover" />
+  <title>Rabbit Receipt Scanner</title>
+  <style>
+    body { background: #000; color: #fff; margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    .header { background:#222; color:#ffa500; height:32px; line-height:32px; text-align:center; font-weight:600; font-size:13px; }
+    .bar { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; }
+    select { background:#222; color:#fff; border:1px solid #333; border-radius:6px; padding:4px 6px; font-size:12px; }
+    .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
+    
+    /* Optimized Scan Button for Rabbit R1 */
+    #scanBtn { 
+      width:calc(100% - 24px); 
+      max-width:216px; 
+      height:48px; 
+      background:#ff6b00; 
+      border:none; 
+      border-radius:8px; 
+      margin:16px auto 10px; 
+      display:flex; 
+      align-items:center; 
+      justify-content:flex-start; 
+      padding:0 16px;
+      gap:12px; 
+      font-size:15px; 
+      font-weight:600; 
+      color:#fff; 
+      cursor:pointer;
+      box-shadow:0 2px 8px rgba(255, 107, 0, 0.3);
+      transition: all 0.2s ease;
+    }
+    #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255, 107, 0, 0.4); }
+    #scanBtn:active { transform: scale(0.98); }
+    
+    /* Icon size limited to 30x30px */
+    #scanBtn img { 
+      height:30px; 
+      width:30px; 
+      flex-shrink:0;
+    }
+    
+    #cameraContainer { display:none; flex-direction:column; align-items:center; }
+    video { width:200px; height:132px; border:2px solid #ffa500; border-radius:10px; background:#222; object-fit:cover; }
+    #hintTap { color:#ffa500; font-size:14px; margin-top:8px; }
+    #processing { color:#ffa500; text-align:center; margin-top:8px; display:none; }
+    #previewImg { display:none; margin:10px auto; max-width:200px; border-radius:10px; }
+    #results { display:none; background:#23232c; border-radius:10px; margin:12px; padding:10px 12px; max-height:110px; overflow:auto; }
+    .result-highlight { font-size:13px; color:#06cd98; margin-bottom:4px; }
+    .result-date { font-size:13px; color:#bd8cff; margin-bottom:8px; }
+    .success { color:#66ff99; margin-top:8px; }
+    
+    /* Retry Button */
+    #retryBtn { 
+      width:calc(100% - 24px); 
+      max-width:216px; 
+      height:40px; 
+      background:#222; 
+      border:1px solid #333; 
+      border-radius:8px; 
+      margin:10px auto 16px; 
+      display:flex; 
+      align-items:center; 
+      justify-content:center; 
+      font-size:14px; 
+      font-weight:500; 
+      color:#fff; 
+      cursor:pointer; 
+    }
+  </style>
 </head>
 <body>
-  <div class="header" id="headerTitle">rabbit receipt scanner</div>
-  <div class="bar">
-    <div>
-      <label for="uiLangToggle" style="font-size:12px;opacity:.8;">UI</label>
-      <select aria-label="UI language" id="uiLangToggle">
-        <option value="de" selected>DE</option>
-        <option value="en">EN</option>
-      </select>
-    </div>
-    <div>
-      <label for="langSelect" style="font-size:12px;opacity:.8;">OCR</label>
-      <select aria-label="OCR language" id="langSelect">
-        <option value="de" selected>Deutsch</option>
-        <option value="en">English</option>
-      </select>
-    </div>
-  </div>
-  <div class="content">
-    <button id="scanBtn">
-      <img src="r1-cam.png" alt="Scan" />
-      <span id="labelScan">scan</span>
-    </button>
-    <div id="cameraContainer">
-      <video id="video" autoplay muted playsinline></video>
-      <canvas id="canvas" style="display:none;"></canvas>
-      <div id="hintTap">Antippen zum Erfassen</div>
-    </div>
-    <img id="previewImg" alt="preview" />
-    <div id="processing"><strong id="processTitle">Verarbeitung...</strong> <span id="processText">OCR wird initialisiert ...</span></div>
-    <div id="results"></div>
-    <button id="retryBtn" style="display:none;">Neuer Scan</button>
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="main.js"></script>
+  <div class="header" id="headerTitle">Rabbit Receipt Scanner</div>
+  <div class="bar">
+    <div>
+      <label for="uiLangToggle" style="font-size:12px;opacity:.8;">UI</label>
+      <select aria-label="UI language" id="uiLangToggle">
+        <option value="de" selected>DE</option>
+        <option value="en">EN</option>
+      </select>
+    </div>
+    <div>
+      <label for="langSelect" style="font-size:12px;opacity:.8;">OCR</label>
+      <select aria-label="OCR language" id="langSelect">
+        <option value="de" selected>Deutsch</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+  </div>
+  <div class="content">
+    <button id="scanBtn">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E" alt="Scan" />
+      <span id="labelScan">Scannen</span>
+    </button>
+    <div id="cameraContainer">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas" style="display:none;"></canvas>
+      <div id="hintTap">Antippen zum Erfassen</div>
+    </div>
+    <img id="previewImg" alt="preview" />
+    <div id="processing">
+      <strong id="processTitle">Verarbeitung...</strong> 
+      <span id="processText">OCR wird initialisiert ...</span>
+    </div>
+    <div id="results"></div>
+    <button id="retryBtn" style="display:none;">Neuer Scan</button>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>
