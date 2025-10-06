@@ -9,9 +9,9 @@
     .header { background:#222; color:#ffa500; height:32px; line-height:32px; text-align:center; font-weight:600; font-size:13px; }
     .bar { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; }
     select { background:#222; color:#fff; border:1px solid #333; border-radius:6px; padding:4px 6px; font-size:12px; }
-    .content { display:flex; flex-direction:column; align-items:center; }
-    #scanBtn { width:88px; height:88px; background:#ff6b00; border:none; border-radius:50%; margin:16px auto 10px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px #ff6b0040; }
-    #scanBtn img { height:44px; width:44px; }
+    .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
+    #scanBtn { width:calc(100% - 24px); max-width:216px; height:54px; background:#ff6b00; border:none; border-radius:12px; margin:16px auto 10px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px #ff6b0040; gap:8px; font-size:15px; font-weight:600; color:#fff; }
+    #scanBtn img { height:28px; width:28px; }
     #cameraContainer { display:none; flex-direction:column; align-items:center; }
     video { width:200px; height:132px; border:2px solid #ffa500; border-radius:10px; background:#222; object-fit:cover; }
     #hintTap { color:#ffa500; font-size:14px; margin-top:8px; }
@@ -44,8 +44,7 @@
   <div class="content">
     <button id="scanBtn">
   <img src="r1-cam.png" alt="Scan">
-  <span id="labelScan">Scannen</span>
-</button>
+  <span id="labelScan">Scannen</span></button>
     <div id="cameraContainer">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="canvas" style="display:none;"></canvas>
