@@ -21,7 +21,7 @@
     .result-highlight { font-size:13px; color:#06cd98; margin-bottom:4px; }
     .result-date { font-size:13px; color:#bd8cff; margin-bottom:8px; }
     .success { color:#66ff99; margin-top:8px; }
-   
+    /* STYLES FÜR DEN ZURÜCKSETZ-BUTTON */
     #retryBtn { width:calc(100% - 24px); max-width:216px; height:40px; background:#222; border:1px solid #333; border-radius:12px; margin:10px auto 16px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500; color:#fff; cursor:pointer; }
   </style>
 </head>
@@ -56,7 +56,7 @@
     <img id="previewImg" alt="preview" />
     <div id="processing"><strong id="processTitle">Verarbeitung...</strong> <span id="processText">OCR wird initialisiert ...</span></div>
     <div id="results"></div>
-        <button id="retryBtn" style="display:none;">Neuer Scan</button>
+    <button id="retryBtn" style="display:none;">Neuer Scan</button>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="main.js"></script>
