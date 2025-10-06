@@ -269,3 +269,11 @@
       const totalPatterns = [/(?:total|gesamt|summe|betrag).*?(\d+[.,]\d{2})/i, /(\d+[.,]\d{2}).*?(?:€|EUR|eur)/i, /(?:€|EUR)\s*(\d+[.,]\d{2})/i];
       let foundTotal = null; for (const pattern of totalPatterns) { for (const line of lines) { const match = line.match(pattern); if (match) { foundTotal = match[1] || match[0]; break; } } if (foundTotal) break; }
       const datePatterns = [/\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4}/, /\d{2,4}[\.\/-]\d{1,2}[\.
+
+
+                            if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
