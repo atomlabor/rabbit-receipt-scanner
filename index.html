@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=240, initial-scale=1.0, viewport-fit=cover" />
-  <title>Rabbit Receipt Scanner</title>
+  <title>rabbit receipt scanner</title>
   <style>
     body { background:#000; color:#fff; margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
     .header { background:#222; color:#ffa500; height:32px; line-height:32px; text-align:center; font-weight:600; font-size:13px; }
@@ -33,7 +33,7 @@
       transition: all 0.2s ease;
     }
     #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255,107,0,0.4); }
-    #scanBtn img { height:22px; width:22px; }
+    #scanBtn img { height:60px; width:60px; }
 
     /* Portrait camera viewport: 240x282px, letterboxed with black bars, no crop */
     #cameraContainer { display:none; flex-direction:column; align-items:center; }
@@ -64,8 +64,8 @@
     <div>
       <span class="bar-label">OCR</span>
       <select id="langSelect" aria-label="OCR language">
-        <option value="de" selected>Deutsch / German</option>
-        <option value="en">English / Englisch</option>
+        <option value="de" selected>deutsch / german</option>
+        <option value="en">english / englisch</option>
       </select>
     </div>
   </div>
@@ -73,7 +73,7 @@
   <div class="content">
     <button id="scanBtn">
       <img src="r1-cam.png" alt="Scan" />
-      <span id="labelScan">Scan Receipt</span>
+      <span id="labelScan">scan receipt</span>
     </button>
 
     <div id="cameraContainer">
@@ -81,18 +81,18 @@
         <video id="video" autoplay muted playsinline></video>
       </div>
       <canvas id="canvas" style="display:none;"></canvas>
-      <div id="hintTap">Antippen zum Erfassen · Tap to capture</div>
+      <div id="hintTap">antippen zum erfassen · tap to capture</div>
     </div>
 
     <img id="previewImg" alt="preview" />
 
     <div id="processing">
-      <strong id="processTitle">Verarbeitung / Processing...</strong>
-      <span id="processText">OCR wird initialisiert / Initializing OCR ...</span>
+      <strong id="processTitle">verarbeitung / processing...</strong>
+      <span id="processText">OCR wird initialisiert / initializing OCR ...</span>
     </div>
 
     <div id="results"></div>
-    <button id="retryBtn">Neuer Scan / New Scan</button>
+    <button id="retryBtn">neuer scan / new scan</button>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
