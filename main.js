@@ -26,25 +26,48 @@
     // Camera Container → Capture on Click
     cameraContainer.addEventListener('click', capture);
     
-    // PTT Button → Capture (Rabbit R1 SDK via r1.hardware)
-    if (window.r1 && r1.hardware && typeof r1.hardware.on === 'function') {
-      try {
-        r1.hardware.on('sideClick', () => {
-          console.log('[PTT] Side button clicked');
+    // Scanner-INIT: Redundant PTT initialization for maximum Rabbit-UX compatibility
+    // Best-practice: check existence and event support, log clearly for debugging
+    // 1) Prefer rabbit.hardware if available
+    try {
+      const rabbitHw = (typeof window !== 'undefined' && window.rabbit && rabbit.hardware);
+      if (rabbitHw && typeof rabbitHw.on === 'function') {
+        rabbitHw.on('sideClick', () => {
+          console.log('[PTT] sideClick via rabbit.hardware.on');
           if (cameraContainer.classList.contains('active')) {
             capture();
           } else {
             startCamera();
           }
         });
-        console.log('[INIT] PTT handler registered via r1.hardware.on("sideClick")');
-      } catch (err) {
-        console.error('[INIT] Failed to register PTT handler:', err);
+        console.log('[INIT] PTT registered on rabbit.hardware.on("sideClick")');
+      } else {
+        console.warn('[INIT] rabbit.hardware.on not available');
       }
-    } else {
-      console.warn('[INIT] r1.hardware not available - PTT functionality disabled');
+    } catch (e) {
+      console.error('[INIT] rabbit.hardware PTT init failed:', e);
     }
-    
+
+    // 2) Also register with r1.hardware for SDK variants
+    try {
+      const r1Hw = (typeof window !== 'undefined' && window.r1 && r1.hardware);
+      if (r1Hw && typeof r1Hw.on === 'function') {
+        r1Hw.on('sideClick', () => {
+          console.log('[PTT] sideClick via r1.hardware.on');
+          if (cameraContainer.classList.contains('active')) {
+            capture();
+          } else {
+            startCamera();
+          }
+        });
+        console.log('[INIT] PTT registered on r1.hardware.on("sideClick")');
+      } else {
+        console.warn('[INIT] r1.hardware.on not available');
+      }
+    } catch (e) {
+      console.error('[INIT] r1.hardware PTT init failed:', e);
+    }
+
     updateStatus('Bereit zum Scannen');
   }
   
