@@ -1,11 +1,12 @@
 // Rabbit Receipt Scanner for Rabbit R1 & modern browsers
-// UX: Camera replaces scan button at same position, PTT & click trigger, auto OCR-Mail
+// UX: Camera replaces scan button at same position, PTT & click trigger, auto OCR-Mail via LLM
 (function() {
   'use strict';
   
   // === STATE & DOM
   let stream = null, isScanning = false;
   let scanBtn, cameraContainer, video, statusInfo;
+  let lastOCRText = '', lastImageDataUrl = '';
   
   // === INIT & EVENTS
   function init() {
@@ -84,16 +85,19 @@
       // Stop camera
       stopCamera();
       
-      // Convert to base64
-      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      // Convert to base64 (JPEG with quality 0.7 to reduce size)
+      lastImageDataUrl = canvas.toDataURL('image/jpeg', 0.7);
       
       // Run OCR
       updateStatus('🔍 OCR läuft...');
-      const ocrText = await runOCR(imageDataUrl);
+      lastOCRText = await runOCR(lastImageDataUrl);
       
-      // Send mail via Rabbit LLM
+      // Display OCR results
+      updateStatus('📄 OCR: ' + (lastOCRText.substring(0, 50) || 'Kein Text erkannt') + '...');
+      
+      // Send mail via Rabbit LLM with PluginMessageHandler
       updateStatus('📧 Mail wird versendet...');
-      await sendReceiptMail(ocrText, imageDataUrl);
+      await sendReceiptMailViaLLM(lastOCRText, lastImageDataUrl);
       
       updateStatus('✅ Scan & Mail gesendet!');
       
@@ -129,25 +133,37 @@
     }
   }
   
-  // === SEND MAIL VIA RABBIT LLM
-  async function sendReceiptMail(ocrText, imageDataUrl) {
+  // === SEND MAIL VIA RABBIT LLM WITH PLUGINMESSAGEHANDLER
+  async function sendReceiptMailViaLLM(ocrText, imageDataUrl) {
     try {
-      if (window.rabbit && rabbit.llm && rabbit.llm.sendMailToSelf) {
-        // Send mail to user's own Rabbit email address
-        await rabbit.llm.sendMailToSelf({
-          subject: '🧾 Receipt Scan ' + new Date().toLocaleString('de-DE'),
-          body: `Receipt gescannt am ${new Date().toLocaleString('de-DE')}\n\nOCR-Ergebnis:\n${ocrText}`,
-          attachments: [{
-            name: 'receipt_' + Date.now() + '.jpg',
-            data: imageDataUrl,
-            mimeType: 'image/jpeg'
-          }]
-        });
-        console.log('[MAIL] Sent via rabbit.llm.sendMailToSelf');
+      // Get user email (if available)
+      const userEmail = (window.rabbit && rabbit.user && rabbit.user.email) ? rabbit.user.email : 'your@email.com';
+      
+      // Create prompt for LLM
+      const timestamp = new Date().toLocaleString('de-DE');
+      const subject = '🧾 Receipt Scan ' + timestamp;
+      const body = `Receipt gescannt am ${timestamp}\n\n=== OCR-Ergebnis ===\n${ocrText}\n\n---\nAutomatisch gescannt mit Rabbit Receipt Scanner`;
+      
+      const prompt = `You are an assistant. Please email the receipt scan to the user. Return ONLY valid JSON in this exact format: {"action":"email","to":"${userEmail}","subject":"${subject}","body":"${body.replace(/"/g, '\\"')}","attachments":[{"dataUrl":"<receipt_image>"}]}`;
+      
+      const payload = {
+        useLLM: true,
+        message: prompt,
+        imageDataUrl: imageDataUrl // included for server/tooling
+      };
+      
+      if (typeof PluginMessageHandler !== 'undefined') {
+        PluginMessageHandler.postMessage(JSON.stringify(payload));
+        console.log('[MAIL] Sent via PluginMessageHandler/LLM');
+        console.log('[MAIL] OCR Text:', ocrText);
       } else {
-        console.warn('[MAIL] Rabbit LLM API not available - mail simulation');
-        // Fallback: log to console
-        console.log('[MAIL SIMULATION]\nSubject: Receipt Scan\nOCR Text:', ocrText);
+        // Fallback for non-Rabbit environments
+        console.warn('[MAIL] PluginMessageHandler not available - mail simulation');
+        console.log('[MAIL SIMULATION]');
+        console.log('Subject:', subject);
+        console.log('Body:', body);
+        console.log('OCR Text:', ocrText);
+        console.log('Image DataURL length:', imageDataUrl.length);
       }
     } catch (err) {
       console.error('[MAIL] Failed:', err);
