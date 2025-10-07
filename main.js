@@ -34,7 +34,6 @@
 
   function resetUI() {
     isScanning = false;
-    // Show button again, hide camera
     if (scanBtn) scanBtn.style.display = 'flex';
     if (cameraContainer) cameraContainer.classList.remove('active');
     if (video) {
@@ -47,14 +46,12 @@
     updateStatus('Bereit zum Scannen');
   }
 
-  // --- Simple heuristics to extract key fields from OCR text
+  // --- OCR postprocessing helpers
   function extractStructuredFields(ocrText) {
     const text = (ocrText || '').replace(/\t/g, ' ').replace(/\r/g, '');
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-    // Amount detection: look for keywords and currency patterns
-    let amountLine = '';
-    let amount = '';
+    let amountLine = '', amount = '', date = '', shop = '';
+    // Amount
     const amountRegexes = [
       /(?:(gesamt|summe|betrag|total|zu zahlen|endbetrag)\s*[:\-]?)\s*([+-]?[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{2})?\s*(?:€|eur)?)/i,
       /([+-]?[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{2})?)\s*(€|eur)/i
@@ -65,19 +62,16 @@
         if (m) {
           amountLine = line;
           amount = (m[2] || m[1] || '').toString().trim();
-          // normalize currency formatting a bit
           if (!/[€]/.test(amount) && /€|eur/i.test(line)) amount += ' €';
           break;
         }
       }
       if (amount) break;
     }
-
-    // Date detection (German and ISO common forms)
-    let date = '';
+    // Date
     const dateRegexes = [
-      /(\b\d{1,2}[\.\-/]\d{1,2}[\.\-/]\d{2,4}\b)/, // 07.10.2025, 7-10-25
-      /(\b\d{4}[\-\/.]\d{2}[\-\/.]\d{2}\b)/ // 2025-10-07
+      /(\b\d{1,2}[\.\-/]\d{1,2}[\.\-/]\d{2,4}\b)/,
+      /(\b\d{4}[\-\/.]\d{2}[\-\/.]\d{2}\b)/
     ];
     for (const line of lines) {
       for (const rx of dateRegexes) {
@@ -86,9 +80,7 @@
       }
       if (date) break;
     }
-
-    // Shop name heuristic: first non-empty line without too many digits
-    let shop = '';
+    // Shop name
     for (const line of lines.slice(0, 6)) {
       const letters = line.replace(/[^A-Za-zÄÖÜäöüß\s\-\.&]/g, '');
       const digitRatio = (line.replace(/\D/g, '').length) / Math.max(1, line.length);
@@ -97,28 +89,24 @@
         break;
       }
     }
-
-    // Optional: VAT ID, fiscal ID, etc. (best-effort)
+    // VAT
     const vatId = (text.match(/(USt\-Id|USt\.?Id\.?|VAT|MwSt\.?\s*Nr\.?)[^\n]*([A-Z]{2}[0-9A-Z]{8,12})/i) || [,'',''])[2] || '';
-
     return {
-      betrag: amount || '',
-      betrag_zeile: amountLine || '',
-      datum: date || '',
+      amount: amount || '',
+      amount_line: amountLine || '',
+      date: date || '',
       shop: shop || '',
-      ust_id: vatId || '',
+      vat_id: vatId || '',
       raw_preview: lines.slice(0, 12).join(' \n ')
     };
   }
 
-  // Build compact JSON string for Rabbit LLM
   function buildCompactJSON(ocrText) {
     const fields = extractStructuredFields(ocrText);
-    // ensure pretty but compact JSON
     return JSON.stringify(fields);
   }
 
-  // --- Send a pre-analysis message to the plugin before emailing
+  // --- Plugin call for pre-analysis
   async function triggerImageAnalysisPlugin(imageBase64) {
     try {
       if (window.r1 && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
@@ -127,7 +115,6 @@
           pluginId: 'image-analyzer',
           imageBase64
         });
-        console.log('[Plugin] image-analyzer message sent');
       } else if (typeof PluginMessageHandler !== 'undefined') {
         const payload = {
           useLLM: true,
@@ -136,9 +123,6 @@
           imageBase64
         };
         PluginMessageHandler.postMessage(JSON.stringify(payload));
-        console.log('[Plugin] image-analyzer via PluginMessageHandler');
-      } else {
-        console.log('[Plugin] Simulation: would send image-analyzer message');
       }
     } catch (e) {
       console.warn('[Plugin] image-analyzer trigger failed:', e);
@@ -160,70 +144,64 @@
     }
   }
 
-  // --- Mail via LLM (Rabbit PluginMessageHandler format)
+  // --- Mail via Rabbit LLM
   async function sendReceiptMail(ocrText, imgDataUrl) {
     updateStatus('📧 E-Mail wird versendet...');
 
-    // Prepare JSON body and base64 image
-    const compactJSON = buildCompactJSON(ocrText);
-    const jsonPlusOCRBody = `JSON: ${compactJSON}\n\nOCR:\n${ocrText}`;
+    // ---- Attachment
+    const attachmentObj = { dataUrl: imgDataUrl, filename: 'receipt.jpg' };
 
-    // Convert data URL to base64 for JPEG
+    // Prepare structured prompt
+    const toEmail = 'me@rabbit.tech';
+    const prompt = `You are an assistant. Please analyze the attached OCR scan of a receipt. Sort and extract the data into the fields 'shop', 'date', 'amount', 'VAT-ID' (if present). Return only valid JSON in this format: {"shop":"...", "date":"...", "amount":"...", "vat_id":"..."}.
+Attach the original scan image to the mail.`;
+
+    // Füge OCR als Klartext mit an und Attachment als 'dataUrl'
+    const fullMailBody = `OCR_TEXT:\n${ocrText}`;
+
+    // Plugin-Analyse triggert vor dem Versand (nur base64 für Plugin, nicht für Mail)
     let imageBase64 = '';
     try {
       const m = imgDataUrl.match(/^data:image\/jpeg;base64,(.*)$/i) || imgDataUrl.match(/^data:image\/[^;]+;base64,(.*)$/i);
       imageBase64 = m ? m[1] : '';
+      if (imageBase64) await triggerImageAnalysisPlugin(imageBase64);
     } catch {}
 
-    // Build prompt using original string style (NOT JSON in message)
-    const toEmail = 'me@rabbit.tech';
-    const escapedBody = jsonPlusOCRBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
-    const prompt = `You are an assistant. Please email the attached receipt image with OCR text to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","to":"${toEmail}","subject":"Receipt Scan","body":"${escapedBody}","attachments":[{"dataUrl":"${imgDataUrl}"}]}`;
-
-    // Trigger plugin analysis before email
-    if (imageBase64) await triggerImageAnalysisPlugin(imageBase64);
-
-    // Try Rabbit LLM API with PluginMessageHandler using correct payload structure
+    // --- LLM PluginMessageHandler (empfohlen)
     if (typeof PluginMessageHandler !== 'undefined') {
       try {
         const payload = {
           useLLM: true,
-          message: prompt,
-          imageDataUrl: imgDataUrl
+          message: prompt + "\n\n" + fullMailBody,
+          attachments: [attachmentObj]
         };
         PluginMessageHandler.postMessage(JSON.stringify(payload));
         updateStatus('✅ Scan und Versand erfolgreich!');
-        console.log('[Mail] Sent via PluginMessageHandler with string prompt');
         return;
       } catch (e) {
         console.error('[Mail] PluginMessageHandler failed:', e);
       }
     }
 
-    // Fallback: Try legacy r1.llm.sendMailToSelf
+    // --- Fallback für Rabbit R1 Oldstyle
     if (window.r1 && r1.llm && typeof r1.llm.sendMailToSelf === 'function') {
       try {
         await r1.llm.sendMailToSelf({
           subject: 'Beleg gescannt',
-          body: jsonPlusOCRBody,
-          attachments: [
-            { data: imgDataUrl, filename: 'receipt.jpg' }
-          ]
+          body: prompt + "\n\n" + fullMailBody,
+          attachments: [attachmentObj]
         });
         updateStatus('✅ Scan und Versand erfolgreich!');
-        console.log('[Mail] Sent via r1.llm.sendMailToSelf');
       } catch (e) {
         console.error('[Mail] Legacy API failed:', e);
         throw e;
       }
     } else {
-      console.warn('[Mail] Simulated (Rabbit LLM API not available)');
-      console.log('[Mail] Would send:', { jsonPlusOCRBody, imgBase64Preview: (imageBase64 || '').slice(0, 50) + '...' });
       updateStatus('✅ Scan und Versand erfolgreich! (simuliert)');
     }
   }
 
-  // --- Preprocess
+  // --- Preprocessing
   async function preprocessDataUrl(dataUrl) {
     return new Promise((res, rej) => {
       const img = new Image();
@@ -255,46 +233,27 @@
 
     try {
       updateStatus('📷 Kamera wird gestartet...');
-
-      // Ensure video element exists
       if (!video) {
-        video = document.getElementById('videoPreview');
-        if (!video) {
-          video = document.createElement('video');
-          video.id = 'videoPreview';
-          video.setAttribute('playsinline', '');
-          video.setAttribute('autoplay', '');
-        }
+        video = document.getElementById('videoPreview') || document.createElement('video');
+        video.id = 'videoPreview';
+        video.setAttribute('playsinline', '');
+        video.setAttribute('autoplay', '');
       }
-
       if (!hasR1CameraAPI()) {
-        // Request camera stream
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: 400, height: 240 }
         });
         video.srcObject = stream;
         await video.play();
       }
-
-      // 1. Hide scanBtn
       if (scanBtn) scanBtn.style.display = 'none';
-
-      // 2. Show cameraContainer with active class (triggers display:flex from CSS)
-      if (cameraContainer) {
-        cameraContainer.classList.add('active');
-      }
-
-      // 3. Video styling - CONTAIN to fit fully in frame (CSS already handles this)
+      if (cameraContainer) cameraContainer.classList.add('active');
       video.style.width = '100%';
       video.style.height = '100%';
       video.style.objectFit = 'contain';
       video.style.display = 'block';
       video.style.cursor = 'pointer';
-
-      // 4. Add click event listener to video for capture - THIS STARTS OCR
       video.addEventListener('click', capture);
-      console.log('[Camera] Click listener added to video - clicking starts OCR');
-
       updateStatus('✋ Tippe auf die Preview zum Aufnehmen');
       isScanning = false;
     } catch (e) {
@@ -312,15 +271,13 @@
     if (cameraContainer) cameraContainer.classList.remove('active');
   }
 
-  // --- Capture (R1 preferred) - STARTS OCR CHAIN
+  // --- Capture (Start OCR Chain)
   async function capture() {
     if (isScanning) return;
     isScanning = true;
-
     try {
       updateStatus('📸 Foto aufgenommen, OCR läuft...');
       let capturedDataUrl = '';
-
       if (hasR1CameraAPI()) {
         const photo = await r1.camera.capturePhoto(400, 240);
         capturedDataUrl = await normalizeToDataUrl(photo);
@@ -332,20 +289,14 @@
         cx.drawImage(video, 0, 0);
         capturedDataUrl = c.toDataURL('image/jpeg', 0.7);
       }
-
       stopCamera();
-
       updateStatus('🖼️ Bild wird vorverarbeitet...');
       const preprocessed = await preprocessDataUrl(capturedDataUrl);
       lastImageDataUrl = preprocessed;
-
       updateStatus('🔍 OCR läuft...');
       lastOCRText = await runOCR(preprocessed);
-
       updateStatus('📧 Ergebnis erkannt, E-Mail wird versendet...');
       await sendReceiptMail(lastOCRText, preprocessed);
-
-      // Status is set within sendReceiptMail
       setTimeout(resetUI, 2500);
     } catch (e) {
       console.error('[Capture] Failed:', e);
@@ -356,11 +307,8 @@
     }
   }
 
-  // --- Event wiring
   function bindEvents() {
     if (scanBtn) scanBtn.addEventListener('click', startCamera);
-
-    // Optional: Rabbit hardware side button if available
     try {
       if (window.r1 && r1.hardware && typeof r1.hardware.on === 'function') {
         r1.hardware.on('sideClick', () => {
@@ -369,8 +317,6 @@
         });
       }
     } catch {}
-
-    // Keyboard fallback for desktop testing
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         if (cameraContainer && cameraContainer.classList.contains('active')) capture();
@@ -379,14 +325,11 @@
     });
   }
 
-  // --- Init
   function init() {
     bindEvents();
     updateStatus('Bereit zum Scannen');
   }
 
-  // Start when DOM ready
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
- 
