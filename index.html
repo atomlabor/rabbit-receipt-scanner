@@ -5,103 +5,96 @@
   <meta name="viewport" content="width=240, initial-scale=1.0, viewport-fit=cover" />
   <title>Rabbit Receipt Scanner</title>
   <style>
-    body { background: #000; color: #fff; margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    body { background:#000; color:#fff; margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
     .header { background:#222; color:#ffa500; height:32px; line-height:32px; text-align:center; font-weight:600; font-size:13px; }
     .bar { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; }
     .bar-label { font-size:12px; opacity:0.8; margin-right:4px; }
     select { background:#222; color:#fff; border:1px solid #333; border-radius:6px; padding:4px 6px; font-size:11px; min-width:120px; }
     .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
-    
+
     /* Optimized Scan Button for Rabbit R1 */
-    #scanBtn { 
-      width:calc(100% - 24px); 
-      max-width:216px; 
-      height:48px; 
-      background:#ff6b00; 
-      border:none; 
-      border-radius:8px; 
-      margin:16px auto 10px; 
-      display:flex; 
-      align-items:center; 
-      justify-content:flex-start; 
-      padding:0 16px;
-      gap:12px; 
-      font-size:15px; 
-      font-weight:600; 
-      color:#fff; 
+    #scanBtn {
+      width:calc(100% - 24px);
+      max-width:216px;
+      height:48px;
+      background:#ff6b00;
+      border:none;
+      border-radius:8px;
+      margin:16px auto 10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      font-size:15px;
+      font-weight:600;
+      color:#fff;
       cursor:pointer;
-      box-shadow:0 2px 8px rgba(255, 107, 0, 0.3);
+      box-shadow:0 2px 8px rgba(255,107,0,0.3);
       transition: all 0.2s ease;
     }
-    #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255, 107, 0, 0.4); }
-    #scanBtn:active { transform: scale(0.98); }
-    
-    /* Icon size limited to 30x30px */
-    #scanBtn img { 
-      height:30px; 
-      width:30px; 
-      flex-shrink:0;
-    }
-    
-    /* PORTRAIT CAMERA: 240x282 for Rabbit R1 */
+    #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255,107,0,0.4); }
+    #scanBtn img { height:22px; width:22px; }
+
+    /* Portrait camera viewport: 240x282px, letterboxed with black bars, no crop */
     #cameraContainer { display:none; flex-direction:column; align-items:center; }
-    video { width:240px; height:282px; border:2px solid #ffa500; border-radius:10px; background:#222; object-fit:cover; }
+    #videoWrap { width:240px; height:282px; background:#000; display:flex; align-items:center; justify-content:center; border:2px solid #ffa500; border-radius:10px; overflow:hidden; }
+    video { width:100%; height:100%; object-fit:contain; background:#000; transform-origin:center center; }
+
     #hintTap { color:#ffa500; font-size:12px; margin-top:8px; text-align:center; }
     #processing { color:#ffa500; text-align:center; margin-top:8px; display:none; font-size:12px; }
-    #previewImg { display:none; margin:10px auto; max-width:240px; border-radius:10px; }
+    #previewImg { display:none; margin:10px auto; max-width:240px; max-height:282px; object-fit:contain; background:#000; border-radius:10px; }
     #results { display:none; background:#23232c; border-radius:10px; margin:12px; padding:10px 12px; max-height:110px; overflow:auto; }
     .result-highlight { font-size:13px; color:#06cd98; margin-bottom:4px; }
     .result-date { font-size:13px; color:#bd8cff; margin-bottom:8px; }
     .success { color:#66ff99; margin-top:8px; font-size:12px; }
-    
-    /* Retry Button */
-    #retryBtn { 
-      width:calc(100% - 24px); 
-      max-width:216px; 
-      height:40px; 
-      background:#222; 
-      border:1px solid #333; 
-      border-radius:8px; 
-      margin:10px auto 16px; 
-      display:flex; 
-      align-items:center; 
-      justify-content:center; 
-      font-size:14px; 
-      font-weight:500; 
-      color:#fff; 
-      cursor:pointer; 
+
+    #retryBtn {
+      width:calc(100% - 24px);
+      max-width:216px;
+      height:40px;
+      background:#222; border:1px solid #333; border-radius:8px;
+      margin:10px auto 16px; color:#fff; font-size:14px; font-weight:500; cursor:pointer;
+      display:none;
     }
   </style>
 </head>
 <body>
-  <div class="header" id="headerTitle">Rabbit Receipt Scanner</div>
+  <div class="header" id="headerTitle">rabbit receipt scanner</div>
   <div class="bar">
     <div>
       <span class="bar-label">OCR</span>
-      <select aria-label="OCR language" id="langSelect">
+      <select id="langSelect" aria-label="OCR language">
         <option value="de" selected>Deutsch / German</option>
         <option value="en">English / Englisch</option>
       </select>
     </div>
   </div>
+
   <div class="content">
     <button id="scanBtn">
-      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M21 6h-3.17L16 4h-6v2h5.12l1.83 2H21v12H3V8h3V6H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM8 14c0 2.76 2.24 5 5 5s5-2.24 5-5-2.24-5-5-5-5 2.24-5 5zm5-3c1.65 0 3 1.35 3 3s-1.35 3-3 3-3-1.35-3-3 1.35-3 3-3z'/%3E%3C/svg%3E" alt="Scan"/>
-      <span id="labelScan">Scannen / Scan</span>
+      <img src="r1-cam.png" alt="Scan" />
+      <span id="labelScan">Scan Receipt</span>
     </button>
+
     <div id="cameraContainer">
-      <video id="video" autoplay muted playsinline></video>
+      <div id="videoWrap">
+        <video id="video" autoplay muted playsinline></video>
+      </div>
       <canvas id="canvas" style="display:none;"></canvas>
-      <div id="hintTap">Antippen zum Erfassen / Tap to capture</div>
+      <div id="hintTap">Antippen zum Erfassen · Tap to capture</div>
     </div>
-    <img id="previewImg" alt="preview"/>
+
+    <img id="previewImg" alt="preview" />
+
     <div id="processing">
-      <strong id="processTitle">Verarbeitung / Processing...</strong> 
+      <strong id="processTitle">Verarbeitung / Processing...</strong>
       <span id="processText">OCR wird initialisiert / Initializing OCR ...</span>
     </div>
+
     <div id="results"></div>
-    <button id="retryBtn" style="display:none;">Neuer Scan / New Scan</button>
+    <button id="retryBtn">Neuer Scan / New Scan</button>
   </div>
+
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="main.js"></script>
 </body>
