@@ -47,7 +47,7 @@
       object-fit:contain;
     }
     
-    /* Camera Preview Overlay */
+    /* Camera Preview Container - OPTIMIZED FOR FULL VISIBILITY */
     #cameraContainer {
       display:none;
       position:absolute;
@@ -55,18 +55,26 @@
       left:0;
       width:100%;
       height:100%;
-      background:#000;
+      background:#222;
       border-radius:8px;
       overflow:hidden;
       cursor:pointer;
       box-shadow:0 2px 8px rgba(0,255,100,0.3);
+      /* FLEX CENTERING FOR VIDEO */
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
     }
-    #cameraContainer.active { display:block; }
+    #cameraContainer.active { display:flex; }
+    
+    /* Video Element - CONTAIN TO FIT FULLY IN FRAME */
     #videoPreview {
       width:100%;
       height:100%;
-      object-fit:cover;
+      object-fit:contain;
+      display:block;
     }
+    
     #cameraHint {
       position:absolute;
       bottom:10px;
@@ -89,7 +97,7 @@
     <div id="buttonCameraContainer">
       <button id="scanBtn">
         <img src="r1-cam.png" alt="Scan" />
-        <span>Scan Receipt</span>
+        Scan Receipt
       </button>
       <div id="cameraContainer">
         <video id="videoPreview" autoplay playsinline></video>
