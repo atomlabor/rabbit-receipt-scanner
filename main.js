@@ -7,11 +7,10 @@
   let video = document.getElementById('videoPreview');
   let isScanning = false;
 
-  // --- UTILS & SDK CHECKS
   function hasR1CameraAPI() {
     return window.r1 && r1.camera && typeof r1.camera.capturePhoto === 'function';
   }
-  
+
   function updateStatus(msg) {
     if (statusEl) statusEl.textContent = msg;
     console.log('[Status]', msg);
@@ -30,26 +29,10 @@
     throw new Error('Unsupported photo format');
   }
 
-  async function saveScanToStorage({ image, ocr }) {
-    try {
-      if(window.r1 && r1.storage && r1.storage.plain && typeof r1.storage.plain.setItem === 'function') {
-        await r1.storage.plain.setItem('last_receipt', {
-          time: Date.now(),
-          image,
-          ocr
-        });
-        console.log('[Storage] Saved last_receipt');
-      }
-    } catch (e) {
-      console.warn('[Storage] Save failed', e);
-    }
-  }
-
-  // --- OCR via Tesseract
   async function runOCR(dataUrl) {
     updateStatus('🔍 OCR läuft...');
     try {
-      const { data: { text } } = await Tesseract.recognize(dataUrl, 'deu+eng', {
+      const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'deu+eng', {
         logger: m => console.log(m)
       });
       return text || '';
@@ -59,60 +42,56 @@
     }
   }
 
-  // --- LLM/Mail Versand nach Rabbit-SDK
+  // --- Send mail via Rabbit LLM
   async function sendToRabbitLLM({ ocrText, imgDataUrl }) {
     const base64 = imgDataUrl.split(',')[1] || '';
     const EMAIL = 'me@rabbit.tech';
 
-    // Prompt für LLM/Plugin: Das Bild und OCR-Text sollen als Mail an Rabbit-Account gehen.
+    // Prompt an die LLM für Rabbit
     const prompt = `
       You are an assistant. 
-      Please extract (and sort) shop, date, amount, VAT ID and all other logical receipt fields from the attached receipt/OCR image. 
-      Attach the original receipt image to your mail result.
-      Create a single email with (1) the OCR result as JSON (2) the readable OCR text (3) the receipt image as attachment. 
-      Send this as an email to ${EMAIL}.`;
+      Please extract all logical fields (shop, date, amount, VAT ID, etc.) from the attached receipt image OCR. 
+      Attach the original image to your email and send both the readable OCR text and a JSON with structured fields as the message body, to ${EMAIL}.
+    `;
 
-    // Reale Rabbit Integration: Immer SDK first!
+    // Stelle sicher, dass IMMER Rabbit-API verwendet wird
     if(window.r1 && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
       await r1.messaging.sendMessage(
-        prompt,
+        prompt + "
+OCR_TEXT:
+" + ocrText,
         {
           useLLM: true,
           pluginId: 'image-analyzer',
-          imageBase64: base64,
-          ocrText // Wird als custom Field mit der Message übertragen
+          imageBase64: base64 // echtes Bild
         }
       );
-      updateStatus('✅ Scan und Versand läuft (Rabbit LLM)!');
+      updateStatus('✅ Scan und Versand läuft mit Rabbit LLM!');
       return;
     }
-
-    // Fallback: Legacy Direct Mail-Rabbit
+    // Fallback: r1.llm.sendMailToSelf (nur falls messaging nicht geht)
     if(window.r1 && r1.llm && typeof r1.llm.sendMailToSelf === 'function') {
       await r1.llm.sendMailToSelf({
         subject: 'Receipt Scan',
-        body: `[Receipt OCR]
-
-${ocrText}`,
+        body: ocrText,
         attachments: [{
           filename: 'receipt.jpg',
           dataUrl: imgDataUrl
         }]
       });
-      updateStatus('✅ Scan und Versand erfolgreich! (API Fallback)');
+      updateStatus('✅ Scan und Versand erfolgreich! (Fallback)');
       return;
     }
-
-    // Nur wenn KEIN SDK vorhanden - Test/Browser
-    updateStatus('⚠️ Demo/Simulation - kein echter Rabbit Versand!');
+    // Wenn kein Rabbit R1 vorhanden:
+    updateStatus('❌ Fehler: Rabbit R1 API nicht verfügbar!');
   }
 
-  // --- CAMERA
+  // --- Camera handling
   async function startCamera() {
     if (isScanning) return;
     isScanning = true;
     try {
-      updateStatus('📷 Kamera wird gestartet...');
+      updateStatus('📷 Kamera startet...');
       if (!video) {
         video = document.getElementById('videoPreview') || document.createElement('video');
         video.id = 'videoPreview';
@@ -134,7 +113,7 @@ ${ocrText}`,
       video.style.display = 'block';
       video.style.cursor = 'pointer';
       video.addEventListener('click', capture);
-      updateStatus('✋ click preview to scan');
+      updateStatus('✋ Click preview to scan');
       isScanning = false;
     } catch (e) {
       console.error('[Camera] Failed:', e);
@@ -151,13 +130,12 @@ ${ocrText}`,
     if (cameraContainer) cameraContainer.classList.remove('active');
   }
 
-  // --- CAPTURE & WORKFLOW
   async function capture() {
     if (isScanning) return;
     isScanning = true;
     try {
       updateStatus('📸 Foto aufgenommen, OCR läuft...');
-      let capturedDataUrl = '';
+      let capturedDataUrl;
       if (hasR1CameraAPI()) {
         const photo = await r1.camera.capturePhoto(400, 240);
         capturedDataUrl = typeof photo === 'string' && photo.startsWith('data:') ? photo : await normalizeToDataUrl(photo);
@@ -171,12 +149,10 @@ ${ocrText}`,
       }
       stopCamera();
 
-      // OCR und Storage
+      // OCR und Versand
       const ocrText = await runOCR(capturedDataUrl);
-      await saveScanToStorage({ image: capturedDataUrl, ocr: ocrText });
-      updateStatus('📧 Versand wird vorbereitet...');
+      updateStatus('📧 Versand startet...');
       await sendToRabbitLLM({ ocrText, imgDataUrl: capturedDataUrl });
-
       setTimeout(resetUI, 2500);
     } catch (e) {
       console.error('[Capture] Failed:', e);
@@ -195,13 +171,11 @@ ${ocrText}`,
       video.srcObject.getTracks().forEach(t => t.stop());
       video.srcObject = null;
     }
-    updateStatus('start the scan');
+    updateStatus('Start the scan');
   }
 
-  // --- Events & INIT
   function bindEvents() {
     if (scanBtn) scanBtn.addEventListener('click', startCamera);
-    // Hardware button (Rabbit)
     try {
       if (window.r1 && r1.hardware && typeof r1.hardware.on === 'function') {
         r1.hardware.on('sideClick', () => {
@@ -210,7 +184,6 @@ ${ocrText}`,
         });
       }
     } catch {}
-    // Desktop shortcut
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         if (cameraContainer && cameraContainer.classList.contains('active')) capture();
