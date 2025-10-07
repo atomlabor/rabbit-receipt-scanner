@@ -123,7 +123,7 @@
       video.style.display = 'block';
       video.style.cursor = 'pointer';
       video.addEventListener('click', capture);
-      updateStatus('✋ Tippe auf die Preview zum Aufnehmen');
+      updateStatus('✋ click preview to scan');
       isScanning = false;
     } catch (e) {
       console.error('[Camera] Failed:', e);
