@@ -175,29 +175,25 @@
       imageBase64 = m ? m[1] : '';
     } catch {}
 
+    // Build prompt using original string style (NOT JSON in message)
+    const toEmail = 'me@rabbit.tech';
+    const escapedBody = jsonPlusOCRBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    const prompt = `You are an assistant. Please email the attached receipt image with OCR text to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","to":"${toEmail}","subject":"Receipt Scan","body":"${escapedBody}","attachments":[{"dataUrl":"${imgDataUrl}"}]}`;
+
     // Trigger plugin analysis before email
     if (imageBase64) await triggerImageAnalysisPlugin(imageBase64);
 
-    // Try Rabbit LLM API with PluginMessageHandler
+    // Try Rabbit LLM API with PluginMessageHandler using correct payload structure
     if (typeof PluginMessageHandler !== 'undefined') {
       try {
-        const toEmail = 'me@rabbit.tech'; // Rabbit internal mail
-        const prompt = {
-          action: 'email',
-          to: toEmail,
-          subject: 'Receipt Scan',
-          body: jsonPlusOCRBody,
-          attachments: [
-            { filename: 'receipt.jpg', mimeType: 'image/jpeg', base64: imageBase64 }
-          ]
-        };
         const payload = {
           useLLM: true,
-          message: JSON.stringify(prompt)
+          message: prompt,
+          imageDataUrl: imgDataUrl
         };
         PluginMessageHandler.postMessage(JSON.stringify(payload));
         updateStatus('✅ Scan und Versand erfolgreich!');
-        console.log('[Mail] Sent via PluginMessageHandler');
+        console.log('[Mail] Sent via PluginMessageHandler with string prompt');
         return;
       } catch (e) {
         console.error('[Mail] PluginMessageHandler failed:', e);
@@ -390,6 +386,4 @@
   }
 
   // Start when DOM ready
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
-})();
+  if (document.readyState
