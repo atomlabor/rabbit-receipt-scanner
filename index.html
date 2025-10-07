@@ -36,18 +36,27 @@
     #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255,107,0,0.4); }
     #scanBtn img { height:160px; width:160px; flex-shrink:0; }
     #scanBtn span { display:block; text-align:center; margin-top:8px; }
-
-    /* Camera viewport: fit 16:9 video into Rabbit 240x282 via letterboxing */
+    /* Camera viewport: fit 16:9 video into Rabbit 220x250 with orange border */
     #cameraContainer { display:none; flex-direction:column; align-items:center; }
     #videoWrap {
-      width:240px; height:282px; background:#000; display:flex; align-items:center; justify-content:center;
-      border:2px solid #ffa500; border-radius:10px; overflow:hidden; position:relative;
+      width:220px; 
+      height:250px; 
+      background:#000; 
+      display:flex; 
+      align-items:center; 
+      justify-content:center;
+      border:3px solid #ff6600; 
+      border-radius:10px; 
+      overflow:hidden; 
+      position:relative;
     }
     video { width:100%; height:100%; object-fit:contain; background:#000; display:block; }
     #hintTap { color:#ffa500; font-size:12px; margin-top:8px; text-align:center; }
     #processing { color:#ffa500; text-align:center; margin-top:8px; display:none; font-size:12px; }
-    #previewImg { display:none; margin:10px auto; width:240px; height:282px; object-fit:contain; background:#000; border-radius:10px; border:2px solid #ffa500; }
+    #previewImg { display:none; margin:10px auto; width:220px; height:250px; object-fit:contain; background:#000; border-radius:10px; border:3px solid #ff6600; }
     #results { display:none; background:#23232c; border-radius:10px; margin:12px; padding:10px 12px; max-height:110px; overflow:auto; }
+    .ocr-output { font-size:13px; line-height:1.5; }
+    .ocr-output mark { background:#ff6600; color:#fff; padding:2px 4px; border-radius:3px; }
     .result-highlight { font-size:13px; color:#06cd98; margin-bottom:4px; }
     .result-date { font-size:13px; color:#bd8cff; margin-bottom:8px; }
     .success { color:#66ff99; margin-top:8px; font-size:12px; }
@@ -67,19 +76,19 @@
     <div>
       <span class="bar-label">OCR</span>
       <select id="langSelect" aria-label="OCR language">
-        <option value="de" selected>deutsch / german</option>
-        <option value="en">english / englisch</option>
+        <option value="deu" selected>deutsch / german</option>
+        <option value="eng">english / englisch</option>
       </select>
     </div>
   </div>
   <div class="content">
     <button id="scanBtn">
-      <img alt="Scan" />
+      <img src="r1-cam.png" alt="Scan" />
       <span id="labelScan">scan receipt</span>
     </button>
     <div id="cameraContainer">
       <div id="videoWrap">
-        <video id="video" autoplay muted playsinline></video>
+        <video id="video" autoplay playsinline muted></video>
       </div>
       <canvas id="canvas" style="display:none;"></canvas>
       <div id="hintTap">antippen zum erfassen · tap to capture</div>
