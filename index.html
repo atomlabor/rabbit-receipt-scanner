@@ -11,20 +11,21 @@
     .bar-label { font-size:12px; opacity:0.8; margin-right:4px; }
     select { background:#222; color:#fff; border:1px solid #333; border-radius:6px; padding:4px 6px; font-size:11px; min-width:120px; }
     .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
-
     /* Optimized Scan Button for Rabbit R1 */
     #scanBtn {
       width:calc(100% - 24px);
       max-width:216px;
-      height:48px;
+      height:140px;
       background:#ff6b00;
       border:none;
       border-radius:8px;
       margin:16px auto 10px;
       display:flex;
+      flex-direction:column;
       align-items:center;
       justify-content:center;
-      gap:12px;
+      gap:8px;
+      padding:12px;
       font-size:15px;
       font-weight:600;
       color:#fff;
@@ -33,13 +34,12 @@
       transition: all 0.2s ease;
     }
     #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255,107,0,0.4); }
-    #scanBtn img { height:60px; width:60px; }
-
+    #scanBtn img { height:100px; width:100px; display:block; }
+    #scanBtn span { display:block; text-align:center; }
     /* Portrait camera viewport: 240x282px, letterboxed with black bars, no crop */
     #cameraContainer { display:none; flex-direction:column; align-items:center; }
     #videoWrap { width:240px; height:282px; background:#000; display:flex; align-items:center; justify-content:center; border:2px solid #ffa500; border-radius:10px; overflow:hidden; }
     video { width:100%; height:100%; object-fit:contain; background:#000; transform-origin:center center; }
-
     #hintTap { color:#ffa500; font-size:12px; margin-top:8px; text-align:center; }
     #processing { color:#ffa500; text-align:center; margin-top:8px; display:none; font-size:12px; }
     #previewImg { display:none; margin:10px auto; max-width:240px; max-height:282px; object-fit:contain; background:#000; border-radius:10px; }
@@ -47,7 +47,6 @@
     .result-highlight { font-size:13px; color:#06cd98; margin-bottom:4px; }
     .result-date { font-size:13px; color:#bd8cff; margin-bottom:8px; }
     .success { color:#66ff99; margin-top:8px; font-size:12px; }
-
     #retryBtn {
       width:calc(100% - 24px);
       max-width:216px;
@@ -69,32 +68,26 @@
       </select>
     </div>
   </div>
-
   <div class="content">
     <button id="scanBtn">
-      <img src="r1-cam.png" alt="Scan" />
+      <img src="r1-cam.png" alt="Scan">
       <span id="labelScan">scan receipt</span>
     </button>
-
     <div id="cameraContainer">
       <div id="videoWrap">
-        <video id="video" autoplay muted playsinline></video>
+        <video id="video" autoplay playsinline muted></video>
       </div>
       <canvas id="canvas" style="display:none;"></canvas>
       <div id="hintTap">antippen zum erfassen · tap to capture</div>
     </div>
-
-    <img id="previewImg" alt="preview" />
-
+    <img id="previewImg" alt="preview">
     <div id="processing">
       <strong id="processTitle">verarbeitung / processing...</strong>
       <span id="processText">OCR wird initialisiert / initializing OCR ...</span>
     </div>
-
     <div id="results"></div>
     <button id="retryBtn">neuer scan / new scan</button>
   </div>
-
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="main.js"></script>
 </body>
