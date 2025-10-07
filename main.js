@@ -47,7 +47,6 @@
     } catch (e) {
       console.error('[INIT] rabbit.hardware PTT init failed:', e);
     }
-
     // 2) Also register with r1.hardware for SDK variants
     try {
       const r1Hw = (typeof window !== 'undefined' && window.r1 && r1.hardware);
@@ -67,7 +66,6 @@
     } catch (e) {
       console.error('[INIT] r1.hardware PTT init failed:', e);
     }
-
     updateStatus('Bereit zum Scannen');
   }
   
@@ -152,7 +150,12 @@
     try {
       if (window.Tesseract) {
         const { data: { text } } = await Tesseract.recognize(imageDataUrl, 'deu', {
-          logger: m => console.log('[OCR]', m)
+          logger: m => console.log('[OCR]', m),
+          tessedit_pageseg_mode: 6,
+          tessedit_ocr_engine_mode: 1,
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß0123456789€,.:-',
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300'
         });
         return text;
       } else {
