@@ -1,5 +1,5 @@
 // Rabbit Receipt Scanner for Rabbit R1 & modern browsers
-// Features: Camera capture, Tesseract OCR (deu+eng), Rabbit LLM Mail, direct UI output
+// Features: Camera capture, Tesseract OCR (dynamic single-language), Rabbit LLM Mail, direct UI output
 (function () {
   'use strict';
   // === STATE & DOM
@@ -92,7 +92,7 @@
     currentState = 'preview'; updateUI();
     processOCR(image);
   }
-  // === OCR
+  // === OCR with dynamic single-language selection
   async function processOCR(imgDataUrl) {
     if (isScanning) return;
     isScanning = true;
@@ -102,7 +102,13 @@
     const preprocessed = await preprocessImage(imgDataUrl);
     const inputImg = preprocessed || imgDataUrl;
     try {
-      const worker = await Tesseract.createWorker(['deu', 'eng'], 1, {
+      // DYNAMIC SINGLE-LANGUAGE SELECTION: Get language from UI dropdown
+      const langSelect = document.getElementById('langSelect');
+      const selectedLang = (langSelect && langSelect.value === 'de') ? 'deu' : 'eng';
+      console.log('[OCR] Selected language:', selectedLang);
+      
+      // Create worker with ONLY the selected language (not both)
+      const worker = await Tesseract.createWorker([selectedLang], 1, {
         workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
         langPath: 'https://cdn.jsdelivr.net/npm/tessdata-fast@4.1.0',
         corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.0',
