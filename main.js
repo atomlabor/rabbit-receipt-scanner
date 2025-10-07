@@ -104,18 +104,37 @@
         await video.play();
       }
       // After successful camera start: hide button, show video preview
+      // 1. Hide scanBtn
       if (scanBtn) scanBtn.style.display = 'none';
+      
+      // 2. Clear cameraContainer to ensure only video appears
       if (cameraContainer) {
         cameraContainer.innerHTML = '';
+        // 5. Set container styling for centering
+        cameraContainer.style.display = 'flex';
+        cameraContainer.style.justifyContent = 'center';
+        cameraContainer.style.alignItems = 'center';
+        cameraContainer.style.padding = '0';
+        cameraContainer.style.margin = '0';
         cameraContainer.classList.add('active');
       }
+      
+      // 3. Set video styling
       if (video) {
         video.style.display = 'block';
+        video.style.position = 'relative';
         video.style.width = '100%';
         video.style.height = '100%';
         video.style.objectFit = 'contain';
-        if (cameraContainer) cameraContainer.appendChild(video);
+        
+        // 4. Append video to container
+        if (cameraContainer) {
+          cameraContainer.appendChild(video);
+          // 6. Optional: Log container content
+          console.log('[Camera] Container content:', cameraContainer.innerHTML.substring(0, 100));
+        }
       }
+      
       updateStatus('✋ Tap to capture');
     } catch (e) {
       console.error('[Camera] Failed:', e);
