@@ -1,16 +1,13 @@
 (function() {
   'use strict';
-
   // --- DOM References ---
   const scanBtn = document.getElementById('scanBtn');
   const cameraContainer = document.getElementById('cameraContainer');
   const statusEl = document.getElementById('status');
   const video = document.getElementById('video');
-
   let isScanning = false;
   let lastImageDataUrl = '';
   let lastOCRText = '';
-
   // --- Utils
   function hasR1CameraAPI() {
     return window.r1 && r1.camera && typeof r1.camera.capturePhoto === 'function';
@@ -32,9 +29,12 @@
   }
   function resetUI() {
     isScanning = false;
+    // Show button again, hide video
+    if (scanBtn) scanBtn.style.display = 'block';
+    if (video) video.style.display = 'none';
+    if (cameraContainer) cameraContainer.innerHTML = '';
     updateStatus('Bereit zum Scannen');
   }
-
   // --- OCR
   async function runOCR(dataUrl) {
     if (!dataUrl) throw new Error('Kein Bild vorhanden');
@@ -49,7 +49,6 @@
       return '';
     }
   }
-
   // --- Mail
   async function sendReceiptMail(ocrText, imgDataUrl) {
     if (window.r1 && r1.llm && typeof r1.llm.sendMailToSelf === 'function') {
@@ -67,7 +66,6 @@
       console.warn('[Mail] Simulated (Rabbit LLM API not available)');
     }
   }
-
   // --- Preprocess
   async function preprocessDataUrl(dataUrl) {
     return new Promise((res, rej) => {
@@ -92,7 +90,6 @@
       img.src = dataUrl;
     });
   }
-
   // --- Camera
   async function startCamera() {
     if (isScanning) return;
@@ -106,7 +103,19 @@
         video.srcObject = stream;
         await video.play();
       }
-      if (cameraContainer) cameraContainer.classList.add('active');
+      // After successful camera start: hide button, show video preview
+      if (scanBtn) scanBtn.style.display = 'none';
+      if (cameraContainer) {
+        cameraContainer.innerHTML = '';
+        cameraContainer.classList.add('active');
+      }
+      if (video) {
+        video.style.display = 'block';
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.style.objectFit = 'contain';
+        if (cameraContainer) cameraContainer.appendChild(video);
+      }
       updateStatus('✋ Tap to capture');
     } catch (e) {
       console.error('[Camera] Failed:', e);
@@ -121,7 +130,6 @@
     }
     if (cameraContainer) cameraContainer.classList.remove('active');
   }
-
   // --- Capture (R1 preferred)
   async function capture() {
     if (isScanning) return;
@@ -157,12 +165,10 @@
       isScanning = false;
     }
   }
-
   // --- Event wiring
   function bindEvents() {
     if (scanBtn) scanBtn.addEventListener('click', startCamera);
     if (cameraContainer) cameraContainer.addEventListener('click', capture);
-
     // Optional: Rabbit hardware side button if available
     try {
       if (window.r1 && r1.hardware && typeof r1.hardware.on === 'function') {
@@ -172,7 +178,6 @@
         });
       }
     } catch {}
-
     // Keyboard fallback for desktop testing
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -181,7 +186,6 @@
       }
     });
   }
-
   // --- Init
   function init() {
     // Patch: Ensure scan button event binding is reliable
@@ -196,7 +200,6 @@
     bindEvents();
     updateStatus('Bereit zum Scannen');
   }
-
   // Start when DOM ready
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
