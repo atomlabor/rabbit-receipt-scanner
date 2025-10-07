@@ -11,7 +11,7 @@
     .bar-label { font-size:12px; opacity:0.8; margin-right:4px; }
     select { background:#222; color:#fff; border:1px solid #333; border-radius:6px; padding:4px 6px; font-size:11px; min-width:120px; }
     .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
-    /* Optimized Scan Button for Rabbit R1 - 160x160px centered icon with text below */
+    /* Scan Button */
     #scanBtn {
       width:calc(100% - 24px);
       max-width:216px;
@@ -36,10 +36,14 @@
     #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255,107,0,0.4); }
     #scanBtn img { height:160px; width:160px; flex-shrink:0; }
     #scanBtn span { display:block; text-align:center; margin-top:8px; }
-    /* Camera viewport: exact 240x282px Rabbit R1 display, object-fit:contain ensures no cropping */
+
+    /* Camera viewport: fit 16:9 video into Rabbit 240x282 via letterboxing */
     #cameraContainer { display:none; flex-direction:column; align-items:center; }
-    #videoWrap { width:240px; height:282px; background:#000; display:flex; align-items:center; justify-content:center; border:2px solid #ffa500; border-radius:10px; overflow:hidden; position:relative; }
-    video { width:240px; height:282px; object-fit:contain; background:#000; display:block; }
+    #videoWrap {
+      width:240px; height:282px; background:#000; display:flex; align-items:center; justify-content:center;
+      border:2px solid #ffa500; border-radius:10px; overflow:hidden; position:relative;
+    }
+    video { width:100%; height:100%; object-fit:contain; background:#000; display:block; }
     #hintTap { color:#ffa500; font-size:12px; margin-top:8px; text-align:center; }
     #processing { color:#ffa500; text-align:center; margin-top:8px; display:none; font-size:12px; }
     #previewImg { display:none; margin:10px auto; width:240px; height:282px; object-fit:contain; background:#000; border-radius:10px; border:2px solid #ffa500; }
@@ -70,7 +74,7 @@
   </div>
   <div class="content">
     <button id="scanBtn">
-      <img src="r1-cam.png" alt="Scan" />
+      <img alt="Scan" />
       <span id="labelScan">scan receipt</span>
     </button>
     <div id="cameraContainer">
@@ -82,7 +86,8 @@
     </div>
     <img id="previewImg" alt="preview" />
     <div id="processing">
-      <strong id="processTitle">verarbeitung / processing...</strong><br />
+      <strong id="processTitle">verarbeitung / processing...</strong>
+      <br />
       <span id="processText">OCR wird initialisiert / initializing OCR ...</span>
     </div>
     <div id="results"></div>
