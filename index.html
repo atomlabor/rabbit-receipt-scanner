@@ -11,11 +11,11 @@
     .bar-label { font-size:12px; opacity:0.8; margin-right:4px; }
     select { background:#222; color:#fff; border:1px solid #333; border-radius:6px; padding:4px 6px; font-size:11px; min-width:120px; }
     .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
-    /* Optimized Scan Button for Rabbit R1 */
+    /* Optimized Scan Button for Rabbit R1 - 160x160px centered icon with text below */
     #scanBtn {
       width:calc(100% - 24px);
       max-width:216px;
-      height:140px;
+      height:200px;
       background:#ff6b00;
       border:none;
       border-radius:8px;
@@ -24,7 +24,7 @@
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      gap:8px;
+      gap:0;
       padding:12px;
       font-size:15px;
       font-weight:600;
@@ -34,8 +34,8 @@
       transition: all 0.2s ease;
     }
     #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255,107,0,0.4); }
-    #scanBtn img { height:100px; width:100px; display:block; }
-    #scanBtn span { display:block; text-align:center; }
+    #scanBtn img { height:160px; width:160px; display:block; flex-shrink:0; }
+    #scanBtn span { display:block; text-align:center; margin-top:8px; }
     /* Camera viewport: exact 240x282px Rabbit R1 display, object-fit:contain ensures no cropping */
     #cameraContainer { display:none; flex-direction:column; align-items:center; }
     #videoWrap { width:240px; height:282px; background:#000; display:flex; align-items:center; justify-content:center; border:2px solid #ffa500; border-radius:10px; overflow:hidden; position:relative; }
@@ -70,12 +70,12 @@
   </div>
   <div class="content">
     <button id="scanBtn">
-      <img src="icon.png" alt="Scan" />
+      <img src="r1-cam.png" alt="Scan" />
       <span id="labelScan">scan receipt</span>
     </button>
     <div id="cameraContainer">
       <div id="videoWrap">
-        <video id="video" autoplay playsinline muted></video>
+        <video id="video" autoplay muted playsinline></video>
       </div>
       <canvas id="canvas" style="display:none;"></canvas>
       <div id="hintTap">antippen zum erfassen · tap to capture</div>
