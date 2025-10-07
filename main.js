@@ -1,6 +1,5 @@
 (function() {
   'use strict';
-  // --- DOM References ---
   const scanBtn = document.getElementById('scanBtn');
   const cameraContainer = document.getElementById('cameraContainer');
   const statusEl = document.getElementById('statusInfo');
@@ -42,19 +41,15 @@
     }
   }
 
-  // --- Send mail via Rabbit LLM
   async function sendToRabbitLLM({ ocrText, imgDataUrl }) {
     const base64 = imgDataUrl.split(',')[1] || '';
     const EMAIL = 'me@rabbit.tech';
-
-    // Prompt an die LLM für Rabbit
     const prompt = `
       You are an assistant. 
       Please extract all logical fields (shop, date, amount, VAT ID, etc.) from the attached receipt image OCR. 
       Attach the original image to your email and send both the readable OCR text and a JSON with structured fields as the message body, to ${EMAIL}.
     `;
 
-    // Stelle sicher, dass IMMER Rabbit-API verwendet wird
     if(window.r1 && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
       await r1.messaging.sendMessage(
         prompt + "
@@ -63,13 +58,12 @@ OCR_TEXT:
         {
           useLLM: true,
           pluginId: 'image-analyzer',
-          imageBase64: base64 // echtes Bild
+          imageBase64: base64
         }
       );
       updateStatus('✅ Scan und Versand läuft mit Rabbit LLM!');
       return;
     }
-    // Fallback: r1.llm.sendMailToSelf (nur falls messaging nicht geht)
     if(window.r1 && r1.llm && typeof r1.llm.sendMailToSelf === 'function') {
       await r1.llm.sendMailToSelf({
         subject: 'Receipt Scan',
@@ -82,31 +76,45 @@ OCR_TEXT:
       updateStatus('✅ Scan und Versand erfolgreich! (Fallback)');
       return;
     }
-    // Wenn kein Rabbit R1 vorhanden:
     updateStatus('❌ Fehler: Rabbit R1 API nicht verfügbar!');
   }
 
-  // --- Camera handling
+  // --- CAMERA logic: Rabbit = direct Photo, Browser = getUserMedia Preview ---
   async function startCamera() {
     if (isScanning) return;
     isScanning = true;
     try {
       updateStatus('📷 Kamera startet...');
+      if (hasR1CameraAPI()) {
+        // Kein Video! Zeige Button/Overlay und triggere direkt Scan
+        cameraContainer.classList.add('active');
+        updateStatus('✋ Tippe auf "Scan starten"! (oder Side-Taste)');
+        // Ersetze Camera-UI ggf. durch eigenen Scan-Button
+        scanBtn.style.display = 'none';
+        cameraContainer.innerHTML = '<button id="r1ScanNow" style="width:90%;height:128px;font-size:2em;margin:24px auto;display:block;">Scan starten</button>';
+        document.getElementById('r1ScanNow').onclick = async function() {
+          await capture();
+        };
+        // Side-Taste geht automatisch über bindEvents
+        isScanning = false;
+        return;
+      }
+      // Nur BROSWER-FALL: getUserMedia Preview
       if (!video) {
         video = document.getElementById('videoPreview') || document.createElement('video');
         video.id = 'videoPreview';
         video.setAttribute('playsinline', '');
         video.setAttribute('autoplay', '');
       }
-      if (!hasR1CameraAPI()) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: 400, height: 240 }
-        });
-        video.srcObject = stream;
-        await video.play();
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: 400, height: 240 }
+      });
+      video.srcObject = stream;
+      await video.play();
       if (scanBtn) scanBtn.style.display = 'none';
-      if (cameraContainer) cameraContainer.classList.add('active');
+      cameraContainer.classList.add('active');
+      cameraContainer.innerHTML = '';
+      cameraContainer.appendChild(video);
       video.style.width = '100%';
       video.style.height = '100%';
       video.style.objectFit = 'contain';
@@ -114,12 +122,11 @@ OCR_TEXT:
       video.style.cursor = 'pointer';
       video.addEventListener('click', capture);
       updateStatus('✋ Click preview to scan');
-      isScanning = false;
     } catch (e) {
-      console.error('[Camera] Failed:', e);
       updateStatus('❌ Kamera-Fehler: ' + e.message);
       isScanning = false;
     }
+    isScanning = false;
   }
 
   function stopCamera() {
@@ -127,7 +134,8 @@ OCR_TEXT:
       video.srcObject.getTracks().forEach(t => t.stop());
       video.srcObject = null;
     }
-    if (cameraContainer) cameraContainer.classList.remove('active');
+    cameraContainer.classList.remove('active');
+    cameraContainer.innerHTML = '';
   }
 
   async function capture() {
@@ -148,25 +156,22 @@ OCR_TEXT:
         capturedDataUrl = c.toDataURL('image/jpeg', 0.7);
       }
       stopCamera();
-
-      // OCR und Versand
       const ocrText = await runOCR(capturedDataUrl);
       updateStatus('📧 Versand startet...');
       await sendToRabbitLLM({ ocrText, imgDataUrl: capturedDataUrl });
       setTimeout(resetUI, 2500);
     } catch (e) {
-      console.error('[Capture] Failed:', e);
       updateStatus('❌ Fehler: ' + e.message);
       setTimeout(resetUI, 2500);
-    } finally {
-      isScanning = false;
     }
+    isScanning = false;
   }
 
   function resetUI() {
     isScanning = false;
     if (scanBtn) scanBtn.style.display = 'flex';
-    if (cameraContainer) cameraContainer.classList.remove('active');
+    cameraContainer.classList.remove('active');
+    cameraContainer.innerHTML = '';
     if (video && video.srcObject) {
       video.srcObject.getTracks().forEach(t => t.stop());
       video.srcObject = null;
@@ -175,7 +180,14 @@ OCR_TEXT:
   }
 
   function bindEvents() {
-    if (scanBtn) scanBtn.addEventListener('click', startCamera);
+    // Scan-Button für Browser und Rabbit
+    if (scanBtn) {
+      scanBtn.onclick = null;
+      scanBtn.addEventListener('click', startCamera);
+      scanBtn.addEventListener('touchstart', function(e){
+        e.preventDefault(); startCamera();
+      }, {passive: false});
+    }
     try {
       if (window.r1 && r1.hardware && typeof r1.hardware.on === 'function') {
         r1.hardware.on('sideClick', () => {
