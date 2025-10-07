@@ -1,5 +1,5 @@
 // Rabbit Receipt Scanner for Rabbit R1 & modern browsers
-// Features: Camera capture, Tesseract OCR (dynamic single-language), Rabbit LLM Mail, direct UI output
+// Features: Portrait camera, Tesseract OCR (dynamic single-language), Rabbit LLM Mail with PluginMessageHandler, direct UI output
 (function () {
   'use strict';
   // === STATE & DOM
@@ -63,11 +63,18 @@
     if (previewImg && currentState === 'preview') previewImg.style.transform = `scale(${zoom})`;
     if (before !== zoom) console.log('[ZOOM]', zoom.toFixed(2));
   }
-  // === CAMERA
+  // === CAMERA (PORTRAIT MODE: 240x282)
   async function startCamera() {
     try {
       currentState = 'camera'; updateUI();
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      // Portrait orientation for Rabbit R1: request higher resolution, then constrain display to 240x282
+      stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment', 
+          width: { ideal: 720 }, 
+          height: { ideal: 1280 } 
+        } 
+      });
       video.srcObject = stream; await video.play();
       zoom = 1.0;
     } catch (err) {
@@ -85,7 +92,7 @@
     if (!video || !canvas) { alert('Camera not ready'); return; }
     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
-    const image = canvas.toDataURL('image/jpeg', 0.9);
+    const image = canvas.toDataURL('image/jpeg', 0.7);
     storage.set('r1.lastImage', image);
     stopCamera();
     if (previewImg) previewImg.src = image;
@@ -169,21 +176,40 @@
     if (results) results.innerHTML = html;
     if (previewImg && previewImg.src) previewImg.style.display = 'block';
   }
-  // === Rabbit internal mail
-  async function sendReceiptViaRabbitMail(text, img) {
+  // === Rabbit internal mail (using PluginMessageHandler for LLM email)
+  async function sendReceiptViaRabbitMail(ocrText, imgDataUrl) {
+    // Try rabbit.llm.sendMailToSelf first (native API)
     if (window.rabbit && rabbit.llm && typeof rabbit.llm.sendMailToSelf === 'function') {
       try {
         await rabbit.llm.sendMailToSelf({
-          subject: `Receipt Scan - ${new Date().toLocaleString('de-DE')}`,
-          body: text,
-          attachment: img
+          subject: 'Beleg-Scan',
+          body: ocrText,
+          attachment: imgDataUrl
         });
-        if (results) results.innerHTML += '<div class="success">✓ Receipt sent!</div>';
+        if (results) results.innerHTML += '<div class="success">✓ Beleg per Rabbit-Mail gesendet!</div>';
+        console.log('[MAIL] Sent via rabbit.llm.sendMailToSelf');
+        return;
       } catch (err) {
-        console.error('[MAIL] Error sending:', err);
+        console.error('[MAIL] rabbit.llm.sendMailToSelf failed:', err);
+      }
+    }
+    // Fallback: Use PluginMessageHandler with LLM email prompt
+    if (typeof PluginMessageHandler !== 'undefined') {
+      try {
+        const prompt = `You are an assistant. Please email the OCR scan result to the device email address. Return ONLY valid JSON in this exact format: {"action":"email","to":"device","subject":"Beleg-Scan","body":"${ocrText.replace(/"/g, '\\"').replace(/\n/g, '\\n')}","attachments":[{"dataUrl":"<dataurl>"}]}`;
+        const payload = {
+          useLLM: true,
+          message: prompt,
+          imageDataUrl: imgDataUrl
+        };
+        PluginMessageHandler.postMessage(JSON.stringify(payload));
+        if (results) results.innerHTML += '<div class="success">✓ Beleg per LLM-Mail gesendet!</div>';
+        console.log('[MAIL] Sent via PluginMessageHandler + LLM');
+      } catch (err) {
+        console.error('[MAIL] PluginMessageHandler failed:', err);
       }
     } else {
-      console.log('[MAIL] Rabbit LLM API not available (browser mode)');
+      console.log('[MAIL] Rabbit API not available (browser mode)');
     }
   }
   // === UI
