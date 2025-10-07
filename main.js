@@ -1,11 +1,14 @@
 // Rabbit Receipt Scanner for Rabbit R1 & modern browsers
 // Features: Landscape camera, Tesseract OCR (dynamic single-language), Rabbit LLM Mail with PluginMessageHandler, direct UI output
-(function () {
+// Hardware: PTT camera trigger + Scrollwheel zoom support
+(function() {
   'use strict';
+
   // === STATE & DOM
   let stream = null, isScanning = false, currentState = 'idle', zoom = 1.0;
   const ZOOM_MIN = 0.75, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
   let scanBtn, cameraContainer, video, canvas, previewImg, results, processing, processText, retryBtn;
+
   // Storage (Rabbit R1 preferred, fallback localStorage)
   const storage = {
     async set(key, value) {
@@ -26,6 +29,7 @@
       return null;
     }
   };
+
   // === INIT & EVENTS
   function init() {
     scanBtn = document.getElementById('scanBtn');
@@ -37,220 +41,259 @@
     processing = document.getElementById('processing');
     processText = document.getElementById('processText');
     retryBtn = document.getElementById('retryBtn');
-    scanBtn && scanBtn.addEventListener('click', startCamera);
-    video && video.addEventListener('click', captureImage);
-    cameraContainer && cameraContainer.addEventListener('click', captureImage);
-    retryBtn && retryBtn.addEventListener('click', reset);
-    document.addEventListener('wheel', ev => {
-      if (currentState === 'camera' || currentState === 'preview') applyZoom(ev.deltaY < 0 ? 1 : -1);
-      else if (currentState === 'results' && results) results.scrollTop += ev.deltaY;
-    }, { passive: true });
-    if (window.rabbit && rabbit.hardware && typeof rabbit.hardware.onScroll === 'function') {
-      rabbit.hardware.onScroll(({ direction }) => applyZoom(direction === 'up' ? 1 : -1));
+
+    if (!scanBtn || !video || !canvas || !results) {
+      console.error('[INIT] Missing critical DOM elements.');
+      return;
     }
-    if (window.rabbit && rabbit.hardware && typeof rabbit.hardware.onPTT === 'function') {
-      rabbit.hardware.onPTT(() => { if (currentState === 'camera') captureImage(); else if (currentState === 'idle') startCamera(); });
-    } else {
-      document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); if (currentState === 'camera') captureImage(); else if (currentState === 'idle') startCamera(); } });
+
+    // Scan button event
+    scanBtn.addEventListener('click', handleScan);
+    if (retryBtn) retryBtn.addEventListener('click', resetUI);
+
+    // PTT Hardware Button Support (Camera Trigger)
+    document.addEventListener('keydown', (e) => {
+      // R1 camera trigger is typically mapped to a specific key
+      // Commonly: Space, Enter, or custom key code
+      if (e.key === ' ' || e.key === 'Enter' || e.code === 'CameraShutter') {
+        e.preventDefault();
+        if (currentState === 'camera' && !isScanning) {
+          handleScan();
+        }
+      }
+    });
+
+    // Scrollwheel Zoom Support
+    document.addEventListener('wheel', (e) => {
+      if (currentState === 'camera' && stream) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+        zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom + delta));
+        applyZoom();
+      }
+    }, { passive: false });
+
+    console.log('[INIT] App ready.');
+    setState('idle');
+  }
+
+  // === STATE MANAGEMENT
+  function setState(newState) {
+    currentState = newState;
+    console.log('[STATE]', newState);
+
+    // Update scan button icon based on state
+    const iconPath = 'r1-cam.png'; // Default icon
+    if (scanBtn) {
+      const img = scanBtn.querySelector('img');
+      if (img) {
+        img.src = iconPath;
+        // Add visual feedback for active/success states
+        if (newState === 'camera') {
+          scanBtn.style.borderColor = '#ff6600';
+          scanBtn.style.boxShadow = '0 0 10px rgba(255,102,0,0.5)';
+        } else if (newState === 'success') {
+          scanBtn.style.borderColor = '#00ff00';
+          scanBtn.style.boxShadow = '0 0 10px rgba(0,255,0,0.5)';
+        } else {
+          scanBtn.style.borderColor = '';
+          scanBtn.style.boxShadow = '';
+        }
+      }
     }
-    restorePrevImage();
-    updateUI();
+
+    // Toggle UI visibility
+    if (cameraContainer) cameraContainer.style.display = (newState === 'camera') ? 'block' : 'none';
+    if (processing) processing.style.display = (newState === 'processing') ? 'flex' : 'none';
+    if (results) results.style.display = (newState === 'success' || newState === 'error') ? 'block' : 'none';
   }
-  function applyZoom(delta) {
-    const before = zoom;
-    zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom + delta * ZOOM_STEP));
-    if (video && currentState === 'camera') video.style.transform = `scale(${zoom})`;
-    if (previewImg && currentState === 'preview') previewImg.style.transform = `scale(${zoom})`;
-    if (before !== zoom) console.log('[ZOOM]', zoom.toFixed(2));
-  }
-  // === CAMERA (LANDSCAPE MODE: request 16:9 stream; letterbox inside Rabbit viewport)
+
+  // === CAMERA
   async function startCamera() {
     try {
-      currentState = 'camera'; updateUI();
-      // Request landscape-oriented stream
-      stream = await navigator.mediaDevices.getUserMedia({
+      const constraints = {
         video: {
           facingMode: 'environment',
-          aspectRatio: { ideal: 16/9 },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          aspectRatio: { ideal: 16 / 9 }
         }
-      });
-      video.srcObject = stream; await video.play();
-      // Fill Rabbit viewport width while preserving 16:9; center with letterboxing
-      Object.assign(video.style, {
-        objectFit: 'contain',
-        background: '#000',
-        width: '100%',
-        height: '100%',
-        transform: 'scale(1)'
-      });
+      };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      video.play();
+      setState('camera');
       zoom = 1.0;
+      applyZoom();
     } catch (err) {
       console.error('[CAMERA] Error:', err);
-      alert('Camera error: ' + err);
-      reset();
+      alert('Kamera-Zugriff fehlgeschlagen: ' + err.message);
     }
   }
+
+  function applyZoom() {
+    if (video) {
+      video.style.transform = `scale(${zoom})`;
+    }
+  }
+
   function stopCamera() {
-    try { if (stream) stream.getTracks().forEach(t => t.stop()); if (video) video.srcObject = null; } catch (e) { console.warn('[CAMERA] stop error', e); }
-  }
-  // === CAPTURE with full-frame canvas using video dimensions
-  function captureImage() {
-    if (currentState !== 'camera' || isScanning) return;
-    if (!video || !canvas) { alert('Camera not ready'); return; }
-    const vw = video.videoWidth || 1280;
-    const vh = video.videoHeight || 720;
-    canvas.width = vw; canvas.height = vh;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, vw, vh);
-    ctx.drawImage(video, 0, 0, vw, vh);
-    const image = canvas.toDataURL('image/jpeg', 0.9);
-    storage.set('r1.lastImage', image);
-    stopCamera();
-    if (previewImg) {
-      previewImg.src = image;
-      previewImg.style.maxWidth = '100%';
-      previewImg.style.maxHeight = '100%';
-      previewImg.style.objectFit = 'contain';
-      previewImg.style.background = '#000';
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      stream = null;
     }
-    currentState = 'preview'; updateUI();
-    processOCR(image);
   }
-  // === OCR: strict black-white preprocessing (binary threshold), no grayscale retained
-  async function processOCR(imgDataUrl) {
+
+  // === SCAN HANDLER
+  async function handleScan() {
     if (isScanning) return;
-    isScanning = true;
-    currentState = 'processing'; updateUI();
-    if (processText) processText.textContent = 'OCR wird initialisiert ...';
-    const preprocessed = await preprocessImageBW(imgDataUrl); // strict BW
-    const inputImg = preprocessed || imgDataUrl;
+
+    if (currentState === 'idle') {
+      await startCamera();
+    } else if (currentState === 'camera') {
+      isScanning = true;
+      captureAndProcess();
+    }
+  }
+
+  async function captureAndProcess() {
     try {
-      const langSelect = document.getElementById('langSelect');
-      const selectedLang = (langSelect && langSelect.value === 'de') ? 'deu' : 'eng';
-      const worker = await Tesseract.createWorker([selectedLang], 1, {
-        workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
-        langPath: 'https://cdn.jsdelivr.net/npm/tessdata-fast@4.1.0',
-        corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.0',
-        logger: m => { if (processText) processText.textContent = m.status + (m.progress ? ` ${Math.round(m.progress*100)}%` : ''); }
-      });
-      const result = await worker.recognize(inputImg, { tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK });
-      await worker.terminate();
-      const ocrText = (result && result.data && result.data.text) ? result.data.text : '';
-      showResult(ocrText);
-      currentState = 'results'; updateUI();
-      await storage.set('r1.lastOCR', ocrText);
-      await sendReceiptViaRabbitMail(ocrText, imgDataUrl);
+      // Capture frame
+      const ctx = canvas.getContext('2d');
+      canvas.width = video.videoWidth || 1920;
+      canvas.height = video.videoHeight || 1080;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataURL = canvas.toDataURL('image/jpeg', 0.9);
+
+      // Show preview
+      if (previewImg) previewImg.src = dataURL;
+
+      stopCamera();
+      setState('processing');
+      if (processText) processText.textContent = 'OCR läuft...';
+
+      // OCR with Tesseract (default: deu)
+      const text = await runOCR(dataURL);
+
+      if (text && text.trim()) {
+        // Highlight German OCR keywords
+        const highlighted = highlightGermanKeywords(text);
+        
+        // Display results
+        if (results) {
+          results.innerHTML = `
+            <h3>✅ Beleg gescannt</h3>
+            <div class="ocr-output">${highlighted}</div>
+          `;
+        }
+
+        // Auto-send email to rabbit.llm
+        await sendRabbitMail(text);
+
+        setState('success');
+        await storage.set('lastScan', { text, timestamp: Date.now() });
+      } else {
+        throw new Error('Kein Text erkannt.');
+      }
     } catch (err) {
-      console.error('[OCR] Error:', err);
-      showResult('OCR Error: ' + (err && err.message ? err.message : String(err)));
-      currentState = 'results'; updateUI();
+      console.error('[SCAN] Error:', err);
+      if (results) {
+        results.innerHTML = `<h3>❌ Fehler</h3><p>${err.message}</p>`;
+      }
+      setState('error');
     } finally {
       isScanning = false;
     }
   }
-  // Strict BW preprocessing: grayscale -> optional light blur -> adaptive mean threshold -> binary image only
-  function preprocessImageBW(imgDataUrl) {
-    return new Promise(resolve => {
-      const img = new Image();
-      img.onload = function () {
-        const w = img.width, h = img.height;
-        const c = document.createElement('canvas'); c.width = w; c.height = h;
-        const ctx = c.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        const src = ctx.getImageData(0, 0, w, h);
-        const data = src.data;
-        const gray = new Uint8ClampedArray(w*h);
-        // grayscale + track min/max
-        let min = 255, max = 0;
-        for (let i=0, p=0; i<data.length; i+=4, p++) {
-          const g = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
-          gray[p] = g; if (g < min) min = g; if (g > max) max = g;
-        }
-        // optional light 3x3 box blur to reduce noise
-        const blur = new Uint8ClampedArray(gray.length);
-        for (let y=1; y<h-1; y++) {
-          for (let x=1; x<w-1; x++) {
-            let acc=0; for (let j=-1;j<=1;j++) for (let i=-1;i<=1;i++) acc += gray[(y+j)*w + (x+i)];
-            blur[y*w+x] = acc/9;
-          }
-        }
-        // adaptive mean threshold 9x9 -> pure 0/255
-        const out = new Uint8ClampedArray(gray.length);
-        const rad = 4; // 9x9
-        for (let y=0; y<h; y++) {
-          for (let x=0; x<w; x++) {
-            let sum=0, cnt=0;
-            for (let j=-rad;j<=rad;j++) {
-              const yy = Math.min(h-1, Math.max(0, y+j));
-              for (let i=-rad;i<=rad;i++) {
-                const xx = Math.min(w-1, Math.max(0, x+i));
-                sum += blur[yy*w+xx] || gray[yy*w+xx]; cnt++;
-              }
-            }
-            const mean = sum/cnt - 5; // small bias
-            out[y*w+x] = (gray[y*w+x] > mean) ? 255 : 0;
-          }
-        }
-        // write out as strict black/white image (no grayscale)
-        const outImg = ctx.createImageData(w, h);
-        for (let i=0, p=0; p<out.length; i+=4, p++) {
-          const v = out[p]; outImg.data[i]=v; outImg.data[i+1]=v; outImg.data[i+2]=v; outImg.data[i+3]=255;
-        }
-        ctx.putImageData(outImg, 0, 0);
-        resolve(c.toDataURL('image/png'));
-      };
-      img.onerror = () => resolve(null);
-      img.src = imgDataUrl;
-    });
-  }
-  // === Result rendering (exact text + highlights)
-  function showResult(text) {
-    const lines = (text || '').split('\n').filter(l => l.trim());
-    const total = lines.map(l => l.match(/(?:total|summe|betrag|gesamt).*?(\d+[.,]\d{2})/i)).find(Boolean);
-    const date = lines.map(l => l.match(/\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4}/)).find(Boolean);
-    let html = '<div style="font-size:14px;">';
-    if (total) html += `<div class="result-highlight">Betrag: ${total[1] || total[0]}</div>`;
-    if (date) html += `<div class="result-date">Datum: ${date[0]}</div>`;
-    html += `<pre style="white-space:pre-wrap;color:#eee;">${text}</pre>`;
-    html += '</div>';
-    if (results) results.innerHTML = html;
-    if (previewImg && previewImg.src) previewImg.style.display = 'block';
-  }
-  // === Rabbit internal mail (native first, log fallback)
-  async function sendReceiptViaRabbitMail(ocrText, imgDataUrl) {
-    if (window.rabbit && rabbit.llm && typeof rabbit.llm.sendMailToSelf === 'function') {
-      try {
-        await rabbit.llm.sendMailToSelf({ subject: 'Receipt Scan', body: ocrText, attachment: imgDataUrl });
-        if (results) results.innerHTML += '<div class="success">✓ Receipt sent!</div>';
-        return;
-      } catch (err) { console.error('[MAIL] rabbit.llm.sendMailToSelf failed:', err); }
+
+  // === OCR (Tesseract, default: deu)
+  async function runOCR(imageData) {
+    if (typeof Tesseract === 'undefined') {
+      throw new Error('Tesseract.js nicht geladen.');
     }
-    console.log('[MAIL] Simulated send:', { subject: 'Receipt Scan', body: ocrText.length + ' chars', attachment: (imgDataUrl||'').slice(0,64)+'...' });
+
+    try {
+      const { data: { text } } = await Tesseract.recognize(
+        imageData,
+        'deu', // Default language: German
+        {
+          logger: m => {
+            if (m.status === 'recognizing text' && processText) {
+              processText.textContent = `OCR: ${Math.round(m.progress * 100)}%`;
+            }
+          }
+        }
+      );
+      return text;
+    } catch (err) {
+      throw new Error('OCR fehlgeschlagen: ' + err.message);
+    }
   }
-  // === UI
-  function updateUI() {
-    if (!scanBtn || !cameraContainer || !processing || !results) return;
-    scanBtn.style.display = (currentState === 'idle' || currentState === 'results') ? 'block' : 'none';
-    cameraContainer.style.display = (currentState === 'camera') ? 'flex' : 'none';
-    processing.style.display = (currentState === 'processing') ? 'block' : 'none';
-    results.style.display = (currentState === 'results') ? 'block' : 'none';
-    if (previewImg) previewImg.style.display = (currentState === 'preview' || currentState === 'results') && previewImg.src ? 'block' : 'none';
+
+  // === HIGHLIGHT GERMAN KEYWORDS
+  function highlightGermanKeywords(text) {
+    // German OCR core keywords to highlight
+    const keywords = [
+      'Rechnung', 'Quittung', 'Beleg', 'Summe', 'Total', 'Gesamt',
+      'MwSt', 'USt', 'Steuer', 'Netto', 'Brutto',
+      'Datum', 'Betrag', 'EUR', '€',
+      'Kasse', 'Bon', 'Zahlung', 'Bar', 'EC', 'Kreditkarte'
+    ];
+
+    let highlighted = text;
+    keywords.forEach(keyword => {
+      const regex = new RegExp(`\\b(${keyword})\\b`, 'gi');
+      highlighted = highlighted.replace(regex, '<mark>$1</mark>');
+    });
+
+    // Preserve line breaks
+    highlighted = highlighted.replace(/\n/g, '<br>');
+
+    return highlighted;
   }
-  async function restorePrevImage() {
-    const lastImg = await storage.get('r1.lastImage');
-    if (lastImg && previewImg) previewImg.src = lastImg;
+
+  // === RABBIT MAIL (Auto-send to rabbit.llm)
+  async function sendRabbitMail(ocrText) {
+    try {
+      const recipient = 'rabbit.llm';
+      const subject = 'Neuer Beleg gescannt';
+      const body = `Ein neuer Beleg wurde gescannt:\n\n${ocrText}`;
+
+      // Try Rabbit PluginMessageHandler first
+      if (window.rabbit && rabbit.sendMessage) {
+        await rabbit.sendMessage({
+          type: 'email',
+          to: recipient,
+          subject: subject,
+          body: body
+        });
+        console.log('[MAIL] Sent via Rabbit PluginMessageHandler');
+        return;
+      }
+
+      // Try mailto fallback (may not auto-send)
+      const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailtoLink;
+      console.log('[MAIL] Attempted via mailto fallback');
+
+    } catch (err) {
+      console.warn('[MAIL] Failed to send:', err);
+      // Non-critical error, continue
+    }
   }
-  function reset() {
+
+  // === RESET
+  function resetUI() {
     stopCamera();
-    currentState = 'idle';
-    isScanning = false;
-    if (previewImg) { previewImg.src = ''; previewImg.style.display = 'none'; }
+    setState('idle');
     if (results) results.innerHTML = '';
-    updateUI();
+    if (previewImg) previewImg.src = '';
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+
+  // === START
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
