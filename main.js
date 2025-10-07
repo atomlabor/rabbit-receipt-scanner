@@ -88,12 +88,13 @@
       // Convert to base64 (JPEG with quality 0.7 to reduce size)
       lastImageDataUrl = canvas.toDataURL('image/jpeg', 0.7);
       
-      // Run OCR
-      updateStatus('🔍 OCR läuft...');
+      // Run OCR with Tesseract.js
+      updateStatus('🔍 OCR läuft (Tesseract)...');
       lastOCRText = await runOCR(lastImageDataUrl);
       
       // Display OCR results
-      updateStatus('📄 OCR: ' + (lastOCRText.substring(0, 50) || 'Kein Text erkannt') + '...');
+      const preview = lastOCRText.substring(0, 50) || 'Kein Text erkannt';
+      updateStatus('📄 OCR: ' + preview + '...');
       
       // Send mail via Rabbit LLM with PluginMessageHandler
       updateStatus('📧 Mail wird versendet...');
@@ -113,19 +114,16 @@
     }
   }
   
-  // === OCR PROCESSING
+  // === OCR PROCESSING (Tesseract.js only)
   async function runOCR(imageDataUrl) {
     try {
-      const ocrSelect = document.getElementById('ocrSelect');
-      const ocrEngine = ocrSelect ? ocrSelect.value : 'tesseract';
-      
-      if (ocrEngine === 'tesseract' && window.Tesseract) {
+      if (window.Tesseract) {
         const { data: { text } } = await Tesseract.recognize(imageDataUrl, 'deu', {
           logger: m => console.log('[OCR]', m)
         });
         return text;
       } else {
-        return '[OCR not available - please implement Google Vision API]';
+        throw new Error('Tesseract.js not loaded');
       }
     } catch (err) {
       console.error('[OCR] Failed:', err);
@@ -156,6 +154,7 @@
         PluginMessageHandler.postMessage(JSON.stringify(payload));
         console.log('[MAIL] Sent via PluginMessageHandler/LLM');
         console.log('[MAIL] OCR Text:', ocrText);
+        console.log('[MAIL] Image length:', imageDataUrl.length);
       } else {
         // Fallback for non-Rabbit environments
         console.warn('[MAIL] PluginMessageHandler not available - mail simulation');
