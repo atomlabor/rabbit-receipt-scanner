@@ -146,8 +146,9 @@
       }
       
       if (!hasR1CameraAPI()) {
+        // LANDSCAPE MODE: width > height
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: 240, height: 282 }
+          video: { facingMode: 'environment', width: 400, height: 240 }
         });
         video.srcObject = stream;
         await video.play();
@@ -169,12 +170,12 @@
         cameraContainer.classList.add('active');
       }
       
-      // 4. Set video styling - MAKE IT VISIBLE
+      // 4. Set video styling - LANDSCAPE MODE with cover
       video.style.display = 'block';
       video.style.position = 'relative';
       video.style.width = '100%';
       video.style.height = '100%';
-      video.style.objectFit = 'contain';
+      video.style.objectFit = 'cover';
       video.style.cursor = 'pointer';
       
       // 5. Append video to container
@@ -183,9 +184,9 @@
         console.log('[Camera] Video appended to container');
       }
       
-      // 6. Add click event listener to video for capture
+      // 6. Add click event listener to video for capture - THIS STARTS OCR
       video.addEventListener('click', capture);
-      console.log('[Camera] Click listener added to video');
+      console.log('[Camera] Click listener added to video - clicking starts OCR');
       
       updateStatus('✋ Tippe auf die Preview zum Aufnehmen');
     } catch (e) {
@@ -203,7 +204,7 @@
     if (cameraContainer) cameraContainer.classList.remove('active');
   }
   
-  // --- Capture (R1 preferred)
+  // --- Capture (R1 preferred) - STARTS OCR CHAIN
   async function capture() {
     if (isScanning) return;
     isScanning = true;
@@ -213,7 +214,8 @@
       let capturedDataUrl = '';
       
       if (hasR1CameraAPI()) {
-        const photo = await r1.camera.capturePhoto(240, 282);
+        // LANDSCAPE MODE for R1 API
+        const photo = await r1.camera.capturePhoto(400, 240);
         capturedDataUrl = await normalizeToDataUrl(photo);
       } else {
         if (!video || !video.videoWidth) throw new Error('Video nicht bereit');
@@ -250,7 +252,7 @@
   // --- Event wiring
   function bindEvents() {
     if (scanBtn) scanBtn.addEventListener('click', startCamera);
-    if (cameraContainer) cameraContainer.addEventListener('click', capture);
+    // REMOVED: cameraContainer click listener - only video click should trigger
     
     // Optional: Rabbit hardware side button if available
     try {
