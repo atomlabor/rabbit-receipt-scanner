@@ -26,13 +26,23 @@
     // Camera Container → Capture on Click
     cameraContainer.addEventListener('click', capture);
     
-    // PTT Button → Capture (Rabbit R1 SDK)
-    if (window.rabbit && rabbit.ptt) {
-      rabbit.ptt.onPressed = () => {
-        if (cameraContainer.classList.contains('active')) {
-          capture();
-        }
-      };
+    // PTT Button → Capture (Rabbit R1 SDK via r1.hardware)
+    if (window.r1 && r1.hardware && typeof r1.hardware.on === 'function') {
+      try {
+        r1.hardware.on('sideClick', () => {
+          console.log('[PTT] Side button clicked');
+          if (cameraContainer.classList.contains('active')) {
+            capture();
+          } else {
+            startCamera();
+          }
+        });
+        console.log('[INIT] PTT handler registered via r1.hardware.on("sideClick")');
+      } catch (err) {
+        console.error('[INIT] Failed to register PTT handler:', err);
+      }
+    } else {
+      console.warn('[INIT] r1.hardware not available - PTT functionality disabled');
     }
     
     updateStatus('Bereit zum Scannen');
