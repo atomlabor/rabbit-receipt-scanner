@@ -184,7 +184,7 @@
       video.srcObject.getTracks().forEach(t => t.stop());
       video.srcObject = null;
     }
-    updateStatus('Bereit zum Scannen');
+    updateStatus('start the scan');
   }
 
   // --- Events & INIT
