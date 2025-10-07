@@ -11,7 +11,7 @@
   function hasR1CameraAPI() {
     return window.r1 && r1.camera && typeof r1.camera.capturePhoto === 'function';
   }
-
+  
   function updateStatus(msg) {
     if (statusEl) statusEl.textContent = msg;
     console.log('[Status]', msg);
@@ -32,12 +32,14 @@
 
   async function saveScanToStorage({ image, ocr }) {
     try {
-      await r1.storage.plain.setItem('last_receipt', {
-        time: Date.now(),
-        image,
-        ocr
-      });
-      console.log('[Storage] Saved last_receipt');
+      if(window.r1 && r1.storage && r1.storage.plain && typeof r1.storage.plain.setItem === 'function') {
+        await r1.storage.plain.setItem('last_receipt', {
+          time: Date.now(),
+          image,
+          ocr
+        });
+        console.log('[Storage] Saved last_receipt');
+      }
     } catch (e) {
       console.warn('[Storage] Save failed', e);
     }
@@ -57,32 +59,41 @@
     }
   }
 
-  // --- LLM/Mail Versand nach SDK
+  // --- LLM/Mail Versand nach Rabbit-SDK
   async function sendToRabbitLLM({ ocrText, imgDataUrl }) {
-    // Extrahiere base64 fürs Rabbit SDK (imageBase64/Fallback)
     const base64 = imgDataUrl.split(',')[1] || '';
-    const receiptFieldsPrompt =
-      `You are an assistant. Please extract and sort shop, date, amount, VAT ID and more infos from the attached OCR'd receipt. Attach the original receipt image to this email. Return a valid JSON email structure and send it to me@rabbit.tech.`;
+    const EMAIL = 'me@rabbit.tech';
 
-    // a) Plugin/Analyzer-Aufruf zum Vorbereiten
-    if (window.r1 && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
+    // Prompt für LLM/Plugin: Das Bild und OCR-Text sollen als Mail an Rabbit-Account gehen.
+    const prompt = `
+      You are an assistant. 
+      Please extract (and sort) shop, date, amount, VAT ID and all other logical receipt fields from the attached receipt/OCR image. 
+      Attach the original receipt image to your mail result.
+      Create a single email with (1) the OCR result as JSON (2) the readable OCR text (3) the receipt image as attachment. 
+      Send this as an email to ${EMAIL}.`;
+
+    // Reale Rabbit Integration: Immer SDK first!
+    if(window.r1 && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
       await r1.messaging.sendMessage(
-        receiptFieldsPrompt + '\nOCR_TEXT:\n' + ocrText,
+        prompt,
         {
           useLLM: true,
           pluginId: 'image-analyzer',
-          imageBase64: base64
+          imageBase64: base64,
+          ocrText // Wird als custom Field mit der Message übertragen
         }
       );
-      updateStatus('✅ Scan und Versand läuft! (Rabbit LLM)');
+      updateStatus('✅ Scan und Versand läuft (Rabbit LLM)!');
       return;
     }
 
-    // b) Fallback direkte Mail per r1.llm.sendMailToSelf
-    if (window.r1 && r1.llm && typeof r1.llm.sendMailToSelf === 'function') {
+    // Fallback: Legacy Direct Mail-Rabbit
+    if(window.r1 && r1.llm && typeof r1.llm.sendMailToSelf === 'function') {
       await r1.llm.sendMailToSelf({
         subject: 'Receipt Scan',
-        body: ocrText,
+        body: `[Receipt OCR]
+
+${ocrText}`,
         attachments: [{
           filename: 'receipt.jpg',
           dataUrl: imgDataUrl
@@ -92,8 +103,8 @@
       return;
     }
 
-    // c) Simulation nur in Browser
-    updateStatus('✅ Scan erfolgreich! (nur Simulation im Testbrowser)');
+    // Nur wenn KEIN SDK vorhanden - Test/Browser
+    updateStatus('⚠️ Demo/Simulation - kein echter Rabbit Versand!');
   }
 
   // --- CAMERA
