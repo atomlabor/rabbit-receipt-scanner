@@ -3,8 +3,8 @@
   // --- DOM References ---
   const scanBtn = document.getElementById('scanBtn');
   const cameraContainer = document.getElementById('cameraContainer');
-  const statusEl = document.getElementById('status');
-  let video = document.getElementById('video');
+  const statusEl = document.getElementById('statusInfo');
+  let video = document.getElementById('videoPreview');
   let isScanning = false;
   let lastImageDataUrl = '';
   let lastOCRText = '';
@@ -34,13 +34,16 @@
   
   function resetUI() {
     isScanning = false;
-    // Show button again, hide video
-    if (scanBtn) scanBtn.style.display = 'block';
+    // Show button again, hide camera
+    if (scanBtn) scanBtn.style.display = 'flex';
+    if (cameraContainer) cameraContainer.classList.remove('active');
     if (video) {
-      video.style.display = 'none';
       video.removeEventListener('click', capture);
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
+      }
     }
-    if (cameraContainer) cameraContainer.innerHTML = '';
     updateStatus('Bereit zum Scannen');
   }
   
@@ -61,7 +64,7 @@
   
   // --- Mail via LLM (Rabbit PluginMessageHandler format)
   async function sendReceiptMail(ocrText, imgDataUrl) {
-    updateStatus('📧 E-Mail wird vorbereitet...');
+    updateStatus('📧 E-Mail wird versendet...');
     
     // Try Rabbit LLM API with PluginMessageHandler (new format as per example)
     if (typeof PluginMessageHandler !== 'undefined') {
@@ -76,7 +79,7 @@
         };
         
         PluginMessageHandler.postMessage(JSON.stringify(payload));
-        updateStatus('📧 Gesendet an Rabbit LLM...');
+        updateStatus('✅ Scan und Versand erfolgreich!');
         console.log('[Mail] Sent via PluginMessageHandler:', payload);
         return;
       } catch (e) {
@@ -92,7 +95,7 @@
           body: ocrText || 'Kein Text erkannt',
           attachments: [{ data: imgDataUrl, filename: 'receipt.jpg' }]
         });
-        updateStatus('📧 E-Mail gesendet (Legacy API)');
+        updateStatus('✅ Scan und Versand erfolgreich!');
         console.log('[Mail] Sent via r1.llm.sendMailToSelf');
       } catch (e) {
         console.error('[Mail] Legacy API failed:', e);
@@ -101,6 +104,7 @@
     } else {
       console.warn('[Mail] Simulated (Rabbit LLM API not available)');
       console.log('[Mail] Would send:', { ocrText, imgDataUrl: imgDataUrl.substring(0, 50) + '...' });
+      updateStatus('✅ Scan und Versand erfolgreich! (simuliert)');
     }
   }
   
@@ -139,14 +143,17 @@
       
       // Ensure video element exists
       if (!video) {
-        video = document.createElement('video');
-        video.id = 'video';
-        video.setAttribute('playsinline', '');
-        video.setAttribute('autoplay', '');
+        video = document.getElementById('videoPreview');
+        if (!video) {
+          video = document.createElement('video');
+          video.id = 'videoPreview';
+          video.setAttribute('playsinline', '');
+          video.setAttribute('autoplay', '');
+        }
       }
       
       if (!hasR1CameraAPI()) {
-        // LANDSCAPE MODE: width > height
+        // Request camera stream
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: 400, height: 240 }
         });
@@ -157,38 +164,24 @@
       // 1. Hide scanBtn
       if (scanBtn) scanBtn.style.display = 'none';
       
-      // 2. Clear cameraContainer to ensure only video appears
+      // 2. Show cameraContainer with active class (triggers display:flex from CSS)
       if (cameraContainer) {
-        cameraContainer.innerHTML = '';
-        
-        // 3. Set container styling for centering
-        cameraContainer.style.display = 'flex';
-        cameraContainer.style.justifyContent = 'center';
-        cameraContainer.style.alignItems = 'center';
-        cameraContainer.style.padding = '0';
-        cameraContainer.style.margin = '0';
         cameraContainer.classList.add('active');
       }
       
-      // 4. Set video styling - LANDSCAPE MODE with cover
-      video.style.display = 'block';
-      video.style.position = 'relative';
+      // 3. Video styling - CONTAIN to fit fully in frame (CSS already handles this)
       video.style.width = '100%';
       video.style.height = '100%';
-      video.style.objectFit = 'cover';
+      video.style.objectFit = 'contain';
+      video.style.display = 'block';
       video.style.cursor = 'pointer';
       
-      // 5. Append video to container
-      if (cameraContainer) {
-        cameraContainer.appendChild(video);
-        console.log('[Camera] Video appended to container');
-      }
-      
-      // 6. Add click event listener to video for capture - THIS STARTS OCR
+      // 4. Add click event listener to video for capture - THIS STARTS OCR
       video.addEventListener('click', capture);
       console.log('[Camera] Click listener added to video - clicking starts OCR');
       
       updateStatus('✋ Tippe auf die Preview zum Aufnehmen');
+      isScanning = false;
     } catch (e) {
       console.error('[Camera] Failed:', e);
       updateStatus('❌ Kamera-Fehler: ' + e.message);
@@ -210,11 +203,10 @@
     isScanning = true;
     
     try {
-      updateStatus('📸 Aufnahme...');
+      updateStatus('📸 Foto aufgenommen, OCR läuft...');
       let capturedDataUrl = '';
       
       if (hasR1CameraAPI()) {
-        // LANDSCAPE MODE for R1 API
         const photo = await r1.camera.capturePhoto(400, 240);
         capturedDataUrl = await normalizeToDataUrl(photo);
       } else {
@@ -235,10 +227,10 @@
       updateStatus('🔍 OCR läuft...');
       lastOCRText = await runOCR(preprocessed);
       
-      updateStatus('📧 E-Mail wird versendet...');
+      updateStatus('📧 Ergebnis erkannt, E-Mail wird versendet...');
       await sendReceiptMail(lastOCRText, preprocessed);
       
-      updateStatus('✅ Fertig! Ergebnis wurde per Mail gesendet.');
+      // Status is set within sendReceiptMail
       setTimeout(resetUI, 2500);
     } catch (e) {
       console.error('[Capture] Failed:', e);
@@ -252,7 +244,6 @@
   // --- Event wiring
   function bindEvents() {
     if (scanBtn) scanBtn.addEventListener('click', startCamera);
-    // REMOVED: cameraContainer click listener - only video click should trigger
     
     // Optional: Rabbit hardware side button if available
     try {
@@ -275,15 +266,6 @@
   
   // --- Init
   function init() {
-    // Patch: Ensure scan button event binding is reliable
-    if (scanBtn) {
-      scanBtn.onclick = null;
-      scanBtn.addEventListener('click', function() {
-        console.log('[ScanBtn] Clicked!');
-        startCamera();
-      });
-    }
-    
     bindEvents();
     updateStatus('Bereit zum Scannen');
   }
