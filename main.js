@@ -386,4 +386,7 @@
   }
 
   // Start when DOM ready
-  if (document.readyState
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+ 
