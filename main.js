@@ -1,8 +1,6 @@
 /* Rabbit Receipt Scanner - Jens Special Edition */
-
 // Initialize Tesseract
 const { createWorker } = Tesseract;
-
 let worker = null;
 let stream = null;
 let capturedImageData = null;
@@ -67,6 +65,16 @@ async function startCamera() {
         };
         
         stream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // Get the video element and check if it exists
+        const video = document.getElementById('video');
+        if (!video) {
+            setStatus('Video-Element nicht gefunden');
+            console.error('[CAMERA] Video element not found');
+            return;
+        }
+        
+        video.srcObject = stream;
         setStatus('Kamera bereit');
         console.log('[CAMERA] Camera started successfully');
     } catch (error) {
