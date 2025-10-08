@@ -186,9 +186,9 @@
   // Modified function to send email action with embedded dataUrl via LLM only
   async function sendToAIWithEmbeddedDataUrl(dataUrl, ocrText) {
     // Construct the prompt for the LLM
-const prompt = `Analyse the photo you just took and extract all the data from it. Send me the complete data from the image and the OCR text you determined as an email to myself (neatly formatted). The email body must include a human-readable summary of all important extracted details AND the full raw OCR text extracted from the image. Return valid JSON in this exact format: {"action":"email","subject":"Receipt Scan","body":"Summary: ...\\nOCR Text: ...","attachments":[{"dataUrl":"<dataUrl>"}]}`;
-
-
+const prompt = `You are an assistant. Your task: Email me the text and a summary from the attached receipt image.
+STRICT RULE: Only extract information you 100% read via OCR from THIS image. Do NOT invent, guess, or fill in missing data from other sources or your own logic! If OCR finds nothing, state: 'No data recognized.'
+Return ONLY valid JSON in this exact format: {"action":"email","subject":"Receipt Scan","body":"Summary: ...\\nOCR Text: ...","attachments":[{"dataUrl":"<dataUrl>"}]}`;
      
     // Construct the complete payload with embedded dataUrl
     const payload = {
