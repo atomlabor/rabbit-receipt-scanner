@@ -9,6 +9,7 @@ Key fixes:
 - Rabbit PluginMessageHandler integration with embedded dataUrl and email action
 - deviceControls API: sideButton, scrollWheel with full feature set
 - r1.camera.capturePhoto() hardware camera API support
+- analyzeData & textToSpeech utilities for Rabbit LLM integration
 */
 (function() {
 'use strict';
@@ -56,6 +57,27 @@ function renderState() {
       case States.processing: dom.btnScan.style.display='none'; dom.video.style.display='none'; dom.resultContainer.style.display='none'; setStatus('Processing...'); break;
       case States.results: dom.btnScan.style.display='none'; dom.video.style.display='none'; dom.resultContainer.style.display='block'; setStatus('Results'); break;
     }
+}
+// Rabbit LLM Utilities
+async function analyzeData(prompt, data) {
+    if (!window.r1 || !window.r1.messaging || typeof window.r1.messaging.askLLMJSON !== 'function') {
+        throw new Error('Rabbit r1.messaging.askLLMJSON not available');
+    }
+    let message = prompt;
+    if (data) {
+        message += ` Data: ${JSON.stringify(data)}`;
+    }
+    message += ' Please respond with a JSON analysis.';
+    await window.r1.messaging.askLLMJSON(message);
+    console.log('Sent to LLM for JSON analysis');
+}
+
+async function textToSpeech(text, saveToJournal = false) {
+    if (!window.r1 || !window.r1.messaging || typeof window.r1.messaging.speakText !== 'function') {
+        throw new Error('Rabbit r1.messaging.speakText not available');
+    }
+    await window.r1.messaging.speakText(text, { wantsJournalEntry: saveToJournal });
+    console.log('Text sent to speech:', text);
 }
 // Camera
 async function startCamera(){
@@ -126,14 +148,42 @@ async function takePhoto() {
     // Try hardware camera API first
     if (window.r1 && window.r1.camera && typeof window.r1.camera.capturePhoto === 'function') {
         console.log('Using r1.camera.capturePhoto hardware API');
-        return window.r1.camera.capturePhoto(240, 282);
+        try {
+            const result = await window.r1.camera.capturePhoto(240, 282);
+            // Check if result is valid (Blob or has data)
+            if (!result) {
+                console.warn('r1.camera.capturePhoto returned empty result, falling back');
+                throw new Error('Hardware camera returned no data');
+            }
+            // If result is already a Blob, return it
+            if (result instanceof Blob) {
+                return result;
+            }
+            // If result is a data URL or base64, convert to Blob
+            if (typeof result === 'string' && result.startsWith('data:')) {
+                const response = await fetch(result);
+                return await response.blob();
+            }
+            // Otherwise assume it's valid and return
+            return result;
+        } catch (hwErr) {
+            console.error('Hardware camera API failed:', hwErr);
+            setStatus('Hardware camera failed, trying fallback...');
+            // Fall through to standard ImageCapture
+        }
     }
     // Fallback to standard ImageCapture
     if (imageCapture) {
         console.log('Using standard ImageCapture API');
-        return await imageCapture.takePhoto();
+        try {
+            return await imageCapture.takePhoto();
+        } catch (icErr) {
+            console.error('ImageCapture failed:', icErr);
+            throw new Error('Camera capture failed');
+        }
     }
-    throw new Error('No camera capture method available');
+    // No capture method available
+    throw new Error('No camera available');
 }
 // Main processing
 async function captureAndProcess() {
@@ -168,7 +218,16 @@ async function captureAndProcess() {
     setState(States.results);
   } catch (err) {
     console.error('Processing error:', err);
-    setStatus('Error: ' + err.message);
+    // User-friendly error messages
+    let userMessage = 'Error processing photo.';
+    if (err.message === 'No camera available') {
+      userMessage = 'Camera not available. Please enable camera access.';
+    } else if (err.message === 'Camera capture failed') {
+      userMessage = 'Failed to capture photo. Please try again.';
+    } else if (err.message.includes('Tesseract')) {
+      userMessage = 'OCR engine not loaded. Please refresh.';
+    }
+    setStatus(userMessage);
     showThinking(false);
     setState(States.idle);
   }
