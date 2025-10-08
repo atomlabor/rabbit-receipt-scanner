@@ -30,6 +30,7 @@
       align-items: center;
       justify-content: flex-start;
       overflow: hidden;
+      position: relative;
     }
     #buttonCameraContainer {
       width: 100%;
@@ -116,46 +117,33 @@
       left: 0;
       right: 0;
     }
-    .error {
-      color: #ff4444;
-      background: rgba(255,68,68,0.1);
-    }
-    .success {
-      color: #00ff88;
-      background: rgba(0,255,136,0.1);
-    }
-    .processing {
-      color: #ffa500;
-      background: rgba(255,165,0,0.1);
-    }
-    .hidden {
-      display: none !important;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-    .pulsing {
-      animation: pulse 1.5s infinite;
-    }
+    .error { color: #ff4444; background: rgba(255,68,68,0.1); }
+    .success { color: #00ff88; background: rgba(0,255,136,0.1); }
+    .processing { color: #ffa500; background: rgba(255,165,0,0.1); }
+    .hidden { display: none !important; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    .pulsing { animation: pulse 1.5s infinite; }
   </style>
 </head>
 <body>
   <div class="header">🐰 RABBIT RECEIPT SCANNER</div>
-  
+
   <div class="content">
+    <!-- centered in the content container -->
+    <canvas id="captureCanvas" style="display:none"></canvas>
+
     <div id="buttonCameraContainer">
       <button id="scanBtn">
-        <img src="r1-cam.png" alt="Kamera">
+        <img alt="Kamera" src="rabbit.png" />
         BELEG SCANNEN
       </button>
-      <video id="videoPreview" autoplay playsinline muted></video>
+      <video id="videoPreview" autoplay muted playsinline></video>
     </div>
-    
-    <div class="camera-hint" id="cameraHint"></div>
-    <div class="status" id="status">Bereit zum Scannen</div>
+
+    <div id="cameraHint" class="camera-hint"></div>
+    <div id="status" class="status">Bereit zum Scannen</div>
   </div>
-  
+
   <script src="main.js"></script>
 </body>
 </html>
