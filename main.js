@@ -1,5 +1,4 @@
 /* Rabbit Receipt Scanner - Jens Special Edition */
-
 (function() {
 // === GLOBALS ===
 let currentState = 'camera';
@@ -50,25 +49,25 @@ function cacheDom() {
     const qs = (selector) => document.querySelector('#' + selector);
     dom.video = qs('videoPreview');
     dom.canvas = qs('captureCanvas');
-    dom.scanBtn = qs('scanBtn');
     dom.previewImg = qs('previewImg');
     dom.rabbitLogo = qs('rabbitLogo');
     dom.status = qs('statusText');
     dom.results = qs('results');
+    dom.videoTip = qs('videoTip');
 }
 
 // === UI STATE MANAGEMENT ===
 function showCamera() {
-    if (dom.scanBtn) dom.scanBtn.style.display = 'block';
     if (dom.video) dom.video.style.display = 'block';
+    if (dom.videoTip) dom.videoTip.style.display = 'block';
     if (dom.previewImg) dom.previewImg.style.display = 'none';
     if (dom.rabbitLogo) dom.rabbitLogo.style.display = 'none';
     if (dom.results) dom.results.style.display = 'none';
 }
 
 function showResults(imageDataUrl) {
-    if (dom.scanBtn) dom.scanBtn.style.display = 'none';
     if (dom.video) dom.video.style.display = 'none';
+    if (dom.videoTip) dom.videoTip.style.display = 'none';
     if (dom.previewImg) {
         dom.previewImg.src = imageDataUrl;
         dom.previewImg.style.display = 'block';
@@ -85,8 +84,8 @@ function setStatus(message) {
 
 // === EVENT LISTENERS ===
 function setupEventListeners() {
-    if (dom.scanBtn) {
-        dom.scanBtn.addEventListener('click', captureImage);
+    if (dom.video) {
+        dom.video.addEventListener('click', captureImage);
     }
 }
 
@@ -151,7 +150,7 @@ function captureImage() {
     // Show preview immediately
     showResults(imageData);
     
-    // Process with OCR
+    // Process with OCR directly
     runOCR(imageData);
 }
 
@@ -210,7 +209,7 @@ function init() {
         document.head.appendChild(script);
     }
     
-    // Start camera
+    // Start camera automatically
     reset();
 }
 
