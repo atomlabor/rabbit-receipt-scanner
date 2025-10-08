@@ -1,5 +1,4 @@
 /* Rabbit Receipt Scanner
-
 Key fixes:
 - Scan button completely replaced by video preview when camera starts
 - Video immediately visible in camera state (button hidden)
@@ -9,9 +8,7 @@ Key fixes:
 - Tesseract OCR with deu+eng
 - Rabbit PluginMessageHandler integration with embedded dataUrl and email action
 */
-
 (function() {
-
 'use strict';
 
 // App State
@@ -21,7 +18,6 @@ const States = Object.freeze({
     processing: 'processing',
     results: 'results'
 });
-
 let state = States.idle;
 
 // Media and processing
@@ -56,6 +52,7 @@ function showNextScan(show){ if(dom.nextScanBtn) dom.nextScanBtn.style.display =
 
 // State machine
 function setState(newState) { state = newState; renderState(); }
+
 function renderState() {
     if(!dom.btnScan || !dom.video || !dom.resultContainer) return;
     switch(state){
@@ -84,6 +81,7 @@ async function startCamera(){
         return false;
     }
 }
+
 function stopCamera(){ 
     if(!stream) return; 
     stream.getTracks().forEach(t=>t.stop()); 
@@ -92,6 +90,7 @@ function stopCamera(){
     track = null; 
     imageCapture = null; 
 }
+
 function applyZoom(delta){ 
     if (!track || !imageCapture) return;
     const caps = track.getCapabilities(); 
@@ -140,16 +139,17 @@ async function captureAndProcess() {
   setState(States.processing);
   stopCamera();
   showThinking(true);
+  
   try {
-
     const blob = await imageCapture.takePhoto();
     currentBlob = blob;
     const url = URL.createObjectURL(blob);
     if (dom.previewImg) dom.previewImg.src = url;
+    
     // Tesseract OCR starten
     const ocrText = await runOCR(blob);
     if (dom.ocrText) dom.ocrText.textContent = ocrText || '(no text found)';
-
+    
     const reader = new FileReader();
     reader.onloadend = async () => {
       const dataUrl = reader.result;
@@ -160,6 +160,7 @@ async function captureAndProcess() {
       }
     };
     reader.readAsDataURL(blob);
+    
     showThinking(false);
     showNextScan(true);
     setState(States.results);
@@ -177,6 +178,7 @@ async function onScan() {
     const ok = await startCamera();
     if (ok) setState(States.camera);
 }
+
 function onReset(){
     stopCamera();
     if (dom.previewImg) dom.previewImg.src = '';
@@ -188,6 +190,7 @@ function onReset(){
     showNextScan(false);
     setState(States.idle);
 }
+
 function onWheel(e){
     if(state!==States.camera) return;
     e.preventDefault();
@@ -215,16 +218,15 @@ function onKeyDown(e){
 function bindEvents(){
     dom.btnScan?.addEventListener('click', onScan);
     dom.nextScanBtn?.addEventListener('click', onReset);
-
     // Click on video triggers capture
     dom.video?.addEventListener('click', () => { if(state===States.camera) captureAndProcess(); });
     dom.video?.addEventListener('wheel', onWheel, { passive: false });
-
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('visibilitychange', () => { if(document.hidden) onReset(); });
 }
 
 function init(){ ensureDom(); bindEvents(); setState(States.idle); }
+
 if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', init); } else { init(); }
 
 })();
