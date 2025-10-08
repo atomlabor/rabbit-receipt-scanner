@@ -21,7 +21,7 @@
   // Media and processing
   let stream = null;
   let currentBlob = null;
-  let zoomLevel = 1;
+  let zoomLevel = 0;
   let track = null;
   let imageCapture = null;
   // DOM (must exist in HTML)
