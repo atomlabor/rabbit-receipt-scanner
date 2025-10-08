@@ -1,5 +1,9 @@
 # 🧾 Rabbit Receipt Scanner | WIP (Experimentell)
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E51DRUM)
+
+
+
 Blog: https://atomlabor.de
 
 ⚠️ Experimentelles Projekt – OCR-basierte Belegerkennung kann unzuverlässig sein. Dies ist ein Work‑in‑Progress.
