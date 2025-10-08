@@ -9,10 +9,19 @@
   function hasR1CameraAPI() {
     return window.r1 && r1.camera && typeof r1.camera.capturePhoto === 'function';
   }
-
+  function hasR1StorageAPI() {
+    return window.r1 && r1.storage && typeof r1.storage.save === 'function';
+  }
   function updateStatus(msg) {
     if (statusEl) statusEl.textContent = msg;
     console.log('[Status]', msg);
+  }
+
+  function dataURLtoBlob(dataUrl) {
+    const arr = dataUrl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+      bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+    while(n--) u8arr[n] = bstr.charCodeAt(n);
+    return new Blob([u8arr], { type: mime });
   }
 
   async function normalizeToDataUrl(input) {
@@ -31,9 +40,10 @@
   async function runOCR(dataUrl) {
     updateStatus('🔍 OCR läuft...');
     try {
-      const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'deu+eng', {
-        logger: m => console.log(m)
-      });
+      const { data: { text } } = await window.Tesseract.recognize(
+        dataUrl, 'deu+eng',
+        { logger: m => console.log(m) }
+      );
       return text || '';
     } catch (e) {
       console.error('[OCR] Error:', e);
@@ -41,92 +51,88 @@
     }
   }
 
-  async function sendToRabbitLLM({ ocrText, imgDataUrl }) {
-    const base64 = imgDataUrl.split(',')[1] || '';
-    const EMAIL = 'me@rabbit.tech';
-    const prompt = `
-      You are an assistant. 
-      Please extract all logical fields (shop, date, amount, VAT ID, etc.) from the attached receipt image OCR. 
-      Attach the original image to your email and send both the readable OCR text and a JSON with structured fields as the message body, to ${EMAIL}.
-    `;
-
-    if(window.r1 && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
-      await r1.messaging.sendMessage(
-        prompt + "
-OCR_TEXT:
-" + ocrText,
-        {
-          useLLM: true,
-          pluginId: 'image-analyzer',
-          imageBase64: base64
-        }
-      );
-      updateStatus('✅ Scan und Versand läuft mit Rabbit LLM!');
-      return;
+  async function savePhotoToR1(capturedDataUrl) {
+    if (!hasR1StorageAPI()) {
+      updateStatus("Fehler: Keine Speicher-API auf diesem Device!");
+      return null;
     }
-    if(window.r1 && r1.llm && typeof r1.llm.sendMailToSelf === 'function') {
+    const now = new Date();
+    const p = `/photos/receipt_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}.jpg`;
+    const blob = dataURLtoBlob(capturedDataUrl);
+    await r1.storage.save(p, blob);
+    updateStatus(`Foto gespeichert als ${p}`);
+    return p;
+  }
+
+  async function sendToRabbitLLM({ ocrText, imgDataUrl, filePath }) {
+    // Mail per Rabbit LLM API senden
+    if (window.r1 && r1.llm && typeof r1.llm.sendMailToSelf === 'function') {
       await r1.llm.sendMailToSelf({
-        subject: 'Receipt Scan',
-        body: ocrText,
+        subject: 'Rabbit Receipt Scan',
+        body: `${ocrText}\n\n[Gespeichert unter: ${filePath || 'temporär'}]`,
         attachments: [{
-          filename: 'receipt.jpg',
+          filename: filePath ? filePath.split('/').pop() : 'receipt.jpg',
           dataUrl: imgDataUrl
         }]
       });
-      updateStatus('✅ Scan und Versand erfolgreich! (Fallback)');
+      updateStatus('✅ Scan und Versand abgeschlossen!');
       return;
     }
-    updateStatus('❌ Fehler: Rabbit R1 API nicht verfügbar!');
+    updateStatus('❌ Fehler: Rabbit LLM API nicht verfügbar!');
   }
 
-  // --- CAMERA logic: Rabbit = direct Photo, Browser = getUserMedia Preview ---
   async function startCamera() {
     if (isScanning) return;
     isScanning = true;
     try {
-      updateStatus('📷 Kamera startet...');
-      if (hasR1CameraAPI()) {
-        // Kein Video! Zeige Button/Overlay und triggere direkt Scan
-        cameraContainer.classList.add('active');
-        updateStatus('✋ Tippe auf "Scan starten"! (oder Side-Taste)');
-        // Ersetze Camera-UI ggf. durch eigenen Scan-Button
-        scanBtn.style.display = 'none';
-        cameraContainer.innerHTML = '<button id="r1ScanNow" style="width:90%;height:128px;font-size:2em;margin:24px auto;display:block;">Scan starten</button>';
-        document.getElementById('r1ScanNow').onclick = async function() {
-          await capture();
-        };
-        // Side-Taste geht automatisch über bindEvents
-        isScanning = false;
-        return;
-      }
-      // Nur BROSWER-FALL: getUserMedia Preview
-      if (!video) {
-        video = document.getElementById('videoPreview') || document.createElement('video');
-        video.id = 'videoPreview';
-        video.setAttribute('playsinline', '');
-        video.setAttribute('autoplay', '');
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 400, height: 240 }
-      });
-      video.srcObject = stream;
-      await video.play();
-      if (scanBtn) scanBtn.style.display = 'none';
+      updateStatus('📷 Kamera wird vorbereitet...');
+      // Button verstecken, Container leeren & neu positionieren
+      scanBtn && (scanBtn.style.display = 'none');
       cameraContainer.classList.add('active');
       cameraContainer.innerHTML = '';
-      cameraContainer.appendChild(video);
-      video.style.width = '100%';
-      video.style.height = '100%';
-      video.style.objectFit = 'contain';
-      video.style.display = 'block';
-      video.style.cursor = 'pointer';
-      video.addEventListener('click', capture);
-      updateStatus('✋ Click preview to scan');
+      if (hasR1CameraAPI()) {
+        // Für R1: Overlay-Scan-Fläche
+        const overlay = document.createElement('div');
+        overlay.id = 'r1TapArea';
+        overlay.style.width = '100%';
+        overlay.style.height = '160px';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.background = '#111';
+        overlay.style.color = 'orange';
+        overlay.style.fontSize = '2.5em';
+        overlay.style.cursor = 'pointer';
+        overlay.innerHTML = 'Tippe zum Fotografieren';
+        overlay.onclick = capture;
+        cameraContainer.appendChild(overlay);
+        updateStatus('Tippe auf das dunkle Feld, um ein Foto aufzunehmen!');
+      } else {
+        // Browser: Live-Kamerapreview per getUserMedia
+        if (!video) {
+          video = document.createElement('video');
+          video.id = 'videoPreview';
+        }
+        video.setAttribute('playsinline', '');
+        video.setAttribute('autoplay', '');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: 400, height: 240 }
+        });
+        video.srcObject = stream;
+        await video.play();
+        video.style.width = '100%';
+        video.style.height = '160px';
+        video.style.objectFit = 'contain';
+        video.style.display = 'block';
+        video.style.cursor = 'pointer';
+        cameraContainer.appendChild(video);
+        video.addEventListener('click', capture);
+        updateStatus('Klicke in das Vorschaufenster zum Scannen!');
+      }
     } catch (e) {
       updateStatus('❌ Kamera-Fehler: ' + e.message);
       isScanning = false;
     }
-    isScanning = false;
   }
 
   function stopCamera() {
@@ -142,23 +148,27 @@ OCR_TEXT:
     if (isScanning) return;
     isScanning = true;
     try {
-      updateStatus('📸 Foto aufgenommen, OCR läuft...');
+      updateStatus('📸 Foto wird aufgenommen ...');
       let capturedDataUrl;
+      let filePath = null;
       if (hasR1CameraAPI()) {
         const photo = await r1.camera.capturePhoto(400, 240);
-        capturedDataUrl = typeof photo === 'string' && photo.startsWith('data:') ? photo : await normalizeToDataUrl(photo);
+        capturedDataUrl = (typeof photo === 'string' && photo.startsWith('data:'))
+          ? photo : await normalizeToDataUrl(photo);
+        // Direkt speichern im Speicher
+        filePath = await savePhotoToR1(capturedDataUrl);
       } else {
+        // Browser
         if (!video || !video.videoWidth) throw new Error('Video nicht bereit');
         const c = document.createElement('canvas');
         c.width = video.videoWidth; c.height = video.videoHeight;
-        const cx = c.getContext('2d');
-        cx.drawImage(video, 0, 0);
+        c.getContext('2d').drawImage(video, 0, 0);
         capturedDataUrl = c.toDataURL('image/jpeg', 0.7);
       }
       stopCamera();
       const ocrText = await runOCR(capturedDataUrl);
-      updateStatus('📧 Versand startet...');
-      await sendToRabbitLLM({ ocrText, imgDataUrl: capturedDataUrl });
+      updateStatus('📧 Sende Scan an deine Rabbit-Mail ...');
+      await sendToRabbitLLM({ ocrText, imgDataUrl: capturedDataUrl, filePath });
       setTimeout(resetUI, 2500);
     } catch (e) {
       updateStatus('❌ Fehler: ' + e.message);
@@ -169,18 +179,17 @@ OCR_TEXT:
 
   function resetUI() {
     isScanning = false;
-    if (scanBtn) scanBtn.style.display = 'flex';
+    scanBtn && (scanBtn.style.display = 'flex');
     cameraContainer.classList.remove('active');
     cameraContainer.innerHTML = '';
     if (video && video.srcObject) {
       video.srcObject.getTracks().forEach(t => t.stop());
       video.srcObject = null;
     }
-    updateStatus('Start the scan');
+    updateStatus('Bereit zum Scannen');
   }
 
   function bindEvents() {
-    // Scan-Button für Browser und Rabbit
     if (scanBtn) {
       scanBtn.onclick = null;
       scanBtn.addEventListener('click', startCamera);
@@ -188,6 +197,7 @@ OCR_TEXT:
         e.preventDefault(); startCamera();
       }, {passive: false});
     }
+    // Seitentaste/Multi-Input für Rabbit R1
     try {
       if (window.r1 && r1.hardware && typeof r1.hardware.on === 'function') {
         r1.hardware.on('sideClick', () => {
@@ -208,8 +218,8 @@ OCR_TEXT:
     bindEvents();
     updateStatus('Bereit zum Scannen');
   }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
-
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', init);
+  else
+    init();
 })();
