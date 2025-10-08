@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html lang="de">
-<head>
+
+ <html lang="de">
+ <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=240, initial-scale=1.0, viewport-fit=cover">
   <title>rabbit receipt scanner</title>
@@ -27,15 +28,15 @@
     #ocrText { white-space: pre-wrap; font-size: 12px; }
     .action-btn { margin-top:8px; padding:8px 12px; border-radius:8px; border:1px solid #444; background:#1a1a1a; color:#fff; cursor:pointer; }
   </style>
-</head>
-<body>
+ </head>
+ <body>
   <div class="header">
     <img src="r1-cam.png" alt="Rabbit Camera Logo" width="36" height="36" style="vertical-align:middle;margin-right:8px;">
     RABBIT RECEIPT SCANNER
   </div>
   <div class="content">
     <!-- Thinking GIF centered overlay (initially hidden) -->
-    <img id="thinkingGif" src="rabbit-thinking.gif" alt="Rabbit thinking" style="display:none;width:120px;height:120px;margin:0 auto;position:absolute;top:calc(50% - 33px);left:calc(50% - 33px);z-index:1002;background:transparent;">
+    <img id="thinkingGif" src="rabbit-thinking.gif" alt="Rabbit thinking" style="display:none;width:120px;height:120px;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1002;background:transparent;">
     <canvas id="captureCanvas" style="display:none"></canvas>
     <div id="buttonCameraContainer">
       <button id="scanBtn">
@@ -54,5 +55,5 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="main.js"></script>
-</body>
+ </body>
 </html>
