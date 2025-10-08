@@ -6,11 +6,10 @@
    - Clean state transitions: idle ↔ camera → processing → results → idle
    - Rabbit R1 hardware events: PTT (volume keys, 'v', space, enter), Escape for reset
    - Tesseract OCR with deu+eng
-   - Rabbit LLM mail integration
+   - Rabbit LLM mail integration with explicit prompt and image attachment
 */
 (function() {
   'use strict';
-
   // App State
   const States = Object.freeze({
     idle: 'idle',
@@ -19,18 +18,15 @@
     results: 'results'
   });
   let state = States.idle;
-
   // Media and processing
   let stream = null;
   let currentBlob = null;
   let zoomLevel = 1;
   let track = null;
   let imageCapture = null;
-
   // DOM (must exist in HTML)
   const dom = {};
   function qs(id) { return document.getElementById(id); }
-
   function cacheDom() {
     dom.btnScan = qs('scanBtn');
     dom.status = qs('status');
@@ -41,41 +37,34 @@
     dom.summaryText = qs('summaryText');
     dom.zoomLabel = qs('zoomLabel');
   }
-
   function ensureDom() {
     cacheDom();
     if (!dom.video || !dom.canvas) {
       console.error('Critical DOM elements missing!');
     }
   }
-
   // Set status message
   function setStatus(msg) {
     if (dom.status) dom.status.textContent = msg;
   }
-
   // State management with proper UI updates
   function setState(newState) {
     state = newState;
     updateUI();
   }
-
   function updateUI() {
     // Reset all visibility
     const hide = (el) => { if (el) el.style.display = 'none'; };
     const show = (el, type = 'block') => { if (el) el.style.display = type; };
-
     hide(dom.btnScan);
     hide(dom.video);
     hide(dom.resultsBox);
     if (dom.zoomLabel) hide(dom.zoomLabel);
-
     switch (state) {
       case States.idle:
         show(dom.btnScan);
         setStatus('Bereit zum Scannen');
         break;
-
       case States.camera:
         // KEY FIX: Hide button, show video fullscreen in container
         show(dom.video);
@@ -89,18 +78,15 @@
         if (dom.zoomLabel) show(dom.zoomLabel);
         setStatus('Kamera bereit - Klicken zum Aufnehmen');
         break;
-
       case States.processing:
         setStatus('Verarbeite Bild mit Tesseract OCR...');
         break;
-
       case States.results:
         show(dom.resultsBox);
         setStatus('Fertig!');
         break;
     }
   }
-
   // Camera functions
   async function startCamera() {
     try {
@@ -115,16 +101,13 @@
       stream = await navigator.mediaDevices.getUserMedia(constraints);
       dom.video.srcObject = stream;
       await dom.video.play();
-
       track = stream.getVideoTracks()[0];
       if ('ImageCapture' in window) {
         imageCapture = new ImageCapture(track);
       }
-
       // Reset zoom
       zoomLevel = 1;
       updateZoomDisplay();
-
       setState(States.camera);
     } catch (err) {
       console.error('Camera error:', err);
@@ -133,7 +116,6 @@
       setState(States.idle);
     }
   }
-
   async function closeCamera() {
     if (stream) {
       stream.getTracks().forEach(t => t.stop());
@@ -146,37 +128,30 @@
     imageCapture = null;
     zoomLevel = 1;
   }
-
   // Zoom functions
   function updateZoomDisplay() {
     if (dom.zoomLabel) {
       dom.zoomLabel.textContent = `Zoom: ${zoomLevel.toFixed(1)}x`;
     }
   }
-
   function applyZoom(delta) {
     if (!track) return;
     const capabilities = track.getCapabilities();
     if (!capabilities.zoom) return;
-
     const step = 0.1;
     zoomLevel = Math.max(
       capabilities.zoom.min,
       Math.min(capabilities.zoom.max, zoomLevel + delta * step)
     );
-
     track.applyConstraints({ advanced: [{ zoom: zoomLevel }] })
       .then(() => updateZoomDisplay())
       .catch(err => console.warn('Zoom failed:', err));
   }
-
   // Capture and process
   async function captureAndProcess() {
     if (state !== States.camera) return;
-
     setState(States.processing);
     setStatus('Nehme Foto auf...');
-
     try {
       // Capture from video
       const canvas = dom.canvas;
@@ -184,13 +159,10 @@
       canvas.width = dom.video.videoWidth;
       canvas.height = dom.video.videoHeight;
       ctx.drawImage(dom.video, 0, 0, canvas.width, canvas.height);
-
       // Stop camera immediately after capture
       await closeCamera();
-
       // Convert to blob
       currentBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
-
       // OCR processing
       setStatus('OCR-Analyse läuft (deu+eng)...');
       const result = await Tesseract.recognize(currentBlob, 'deu+eng', {
@@ -200,19 +172,14 @@
           }
         }
       });
-
       const ocrText = result.data.text.trim();
-
       // Display results
       if (dom.resultsText) {
         dom.resultsText.textContent = ocrText || '(Kein Text erkannt)';
       }
-
       setState(States.results);
-
-      // Try to send via Rabbit LLM
-      await sendToRabbitMail(ocrText);
-
+      // Try to send via Rabbit LLM with image
+      await sendToRabbitMail(ocrText, currentBlob);
     } catch (err) {
       console.error('Processing error:', err);
       setStatus('Fehler bei der Verarbeitung: ' + err.message);
@@ -221,23 +188,28 @@
       setTimeout(() => setState(States.idle), 3000);
     }
   }
-
-  async function sendToRabbitMail(ocrText) {
-    if (!ocrText) return;
-
+  async function sendToRabbitMail(ocrText, imageBlob) {
+    if (!imageBlob) return;
     try {
       setStatus('Sende an Rabbit Mail...');
-
-      // Rabbit LLM endpoint (adjust as needed)
+      
+      // Convert blob to base64 for API transmission
+      const base64Image = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(imageBlob);
+      });
+      
+      // Rabbit LLM endpoint with explicit prompt and image attachment
       const response = await fetch('/api/rabbit-llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `Fasse diesen Beleg zusammen und extrahiere wichtige Informationen:\n\n${ocrText}`,
+          prompt: 'Summarise all the important information from this image and then send me all the data by email.',
+          image: base64Image,
           ocrText: ocrText
         })
       });
-
       if (response.ok) {
         const data = await response.json();
         if (dom.summaryText && data.summary) {
@@ -257,13 +229,11 @@
       }
     }
   }
-
   // Event handlers
   async function onScan() {
     if (state !== States.idle) return;
     await startCamera();
   }
-
   async function onReset() {
     await closeCamera();
     currentBlob = null;
@@ -271,7 +241,6 @@
     if (dom.summaryText) dom.summaryText.textContent = '';
     setState(States.idle);
   }
-
   // Mouse wheel zoom over video
   function onWheel(e) {
     if (state !== States.camera) return;
@@ -279,7 +248,6 @@
     const delta = e.deltaY < 0 ? +1 : -1;
     applyZoom(delta);
   }
-
   // Hardware events: PTT capture (Rabbit R1 compatible)
   function onKeyDown(e) {
     // PTT triggers in camera state
@@ -289,20 +257,17 @@
       e.preventDefault();
       captureAndProcess();
     }
-
     // Escape resets from any state
     if (e.key === 'Escape') {
       e.preventDefault();
       onReset();
     }
-
     // 'R' key for reset from results
     if (state === States.results && e.key.toLowerCase() === 'r') {
       e.preventDefault();
       onReset();
     }
   }
-
   // Bind events
   function bindEvents() {
     dom.btnScan?.addEventListener('click', onScan);
@@ -311,20 +276,17 @@
     dom.video?.addEventListener('click', () => {
       if (state === States.camera) captureAndProcess();
     });
-
     dom.video?.addEventListener('wheel', onWheel, { passive: false });
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) onReset();
     });
   }
-
   function init() {
     ensureDom();
     bindEvents();
     setState(States.idle);
   }
-
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
