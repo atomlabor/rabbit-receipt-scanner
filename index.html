@@ -49,54 +49,32 @@
       align-items: center;
       justify-content: center;
     }
-    #scanBtn {
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(135deg, #ff6b00 0%, #ff8c42 100%);
-      border: none;
-      border-radius: 24px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      padding: 20px;
-      font-size: 16px;
-      font-weight: 600;
-      color: #fff;
-      cursor: pointer;
-      box-shadow: 0 4px 20px rgba(255,107,0,0.3);
-      transition: all 0.2s ease;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
-    #scanBtn img {
-      width: 110px;
-      height: 110px;
-      display: block;
-      margin: 0 auto;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-    }
-    #scanBtn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 25px rgba(255,107,0,0.4);
-      background: linear-gradient(135deg, #ff7a1a 0%, #ff9952 100%);
-    }
-    #scanBtn:active {
-      transform: translateY(0px);
-      box-shadow: 0 2px 10px rgba(255,107,0,0.3);
-    }
     #videoPreview {
       width: 100%;
       height: 100%;
       object-fit: cover;
       cursor: pointer;
-      display: none;
+      display: block;
       position: absolute;
       top: 0;
       left: 0;
+    }
+    #videoHint {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 165, 0, 0.9);
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      display: none;
+      z-index: 10;
     }
     #previewImg {
       width: 100%;
@@ -157,22 +135,19 @@
 </head>
 <body>
   <div class="header">
-    <img src="r1-cam.png" alt="Rabbit Camera Logo" width="36" height="36">
+    <img src="data:image/svg+xml,%3Csvg width='36' height='36' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffa500'/%3E%3Cpath d='M35 45c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5zm20 0c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5z' fill='%23000'/%3E%3Cpath d='M30 30c5-8 15-8 20 0m20 0c5-8 15-8 20 0M35 65c5 8 25 8 30 0' stroke='%23000' stroke-width='3' fill='none'/%3E%3C/svg%3E" alt="Rabbit Camera Logo" width="36" height="36">
     RABBIT RECEIPT SCANNER
   </div>
   <div class="content">
     <canvas id="captureCanvas"></canvas>
     <div id="buttonCameraContainer">
-      <button id="scanBtn">
-        <img src="r1-cam.png" alt="Kamera" width="110" height="110">
-        BELEG SCANNEN
-      </button>
-      <video id="videoPreview" autoplay playsinline muted></video>
+      <video id="videoPreview" autoplay muted playsinline></video>
+      <div id="videoHint">Zum Scannen ins Kamerabild tippen</div>
       <img id="previewImg" alt="Captured Receipt">
-      <img id="rabbitLogo" src="rabbit.png" alt="Rabbit Logo">
+      <img id="rabbitLogo" src="data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffa500'/%3E%3Cpath d='M35 45c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5zm20 0c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5z' fill='%23000'/%3E%3Cpath d='M30 30c5-8 15-8 20 0m20 0c5-8 15-8 20 0M35 65c5 8 25 8 30 0' stroke='%23000' stroke-width='3' fill='none'/%3E%3C/svg%3E" alt="Rabbit Logo">
     </div>
     <div id="results"></div>
-    <div id="statusText">Bereit zum Scannen</div>
+    <div id="statusText">Kamera wird gestartet...</div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="main.js"></script>
