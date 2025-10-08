@@ -9,7 +9,8 @@ Key fixes:
 - Rabbit PluginMessageHandler integration with embedded dataUrl and email action
 - deviceControls API: sideButton, scrollWheel with full feature set
 - r1.camera.capturePhoto() hardware camera API support
-- analyzeData & textToSpeech utilities for Rabbit LLM integration
+- textToSpeech fully integrated with results announcement
+- All functions fully wired, no placeholders
 */
 (function() {
 'use strict';
@@ -140,6 +141,23 @@ function displayResults(text, imageData) {
     currentBlob = imageData;
     updateUI();
     updateStatus('Receipt scanned successfully!');
+    
+    // Announce results via text-to-speech
+    const wordCount = text.trim().split(/\s+/).length;
+    textToSpeech(`Receipt scanned. Detected ${wordCount} words.`);
+}
+
+// === TEXT TO SPEECH ===
+function textToSpeech(text) {
+    try {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        speechSynthesis.speak(utterance);
+    } catch (e) {
+        console.warn('[TTS] Failed:', e);
+    }
 }
 
 // === UI MANAGEMENT ===
@@ -245,11 +263,15 @@ function sendEmail() {
                 data: currentBlob
             }]
         });
+        updateStatus('Email sent!');
+        textToSpeech('Email sent successfully.');
+    } else {
+        console.warn('[EMAIL] PluginMessageHandler not available');
+        alert('Email functionality not available on this device');
     }
 }
 
 // === RABBIT R1 INTEGRATIONS ===
-
 // Hardware camera API fallback
 if (window.r1 && window.r1.camera) {
     window.r1.camera.onCaptureResult = function(result) {
@@ -272,7 +294,16 @@ if (window.deviceControls) {
     window.deviceControls.scrollWheel.onScroll = (delta) => {
         if (currentState === 'camera' && stream) {
             zoom = Math.max(1.0, Math.min(3.0, zoom + delta * 0.1));
-            // Apply zoom if supported
+            // Apply zoom if supported by video track
+            try {
+                const track = stream.getVideoTracks()[0];
+                const capabilities = track.getCapabilities();
+                if (capabilities.zoom) {
+                    track.applyConstraints({ advanced: [{ zoom: zoom }] });
+                }
+            } catch (e) {
+                console.warn('[ZOOM] Not supported:', e);
+            }
         }
     };
 }
@@ -316,20 +347,5 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
-
-// Rabbit LLM integration utilities
-window.analyzeData = function(data, callback) {
-    // Placeholder for Rabbit LLM analysis
-    if (callback) callback({ analyzed: true, data });
-};
-
-window.textToSpeech = function(text) {
-    try {
-        const utterance = new SpeechSynthesisUtterance(text);
-        speechSynthesis.speak(utterance);
-    } catch (e) {
-        console.warn('[TTS] Failed:', e);
-    }
-};
 
 })();
