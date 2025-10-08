@@ -13,6 +13,7 @@ Key fixes:
 */
 (function() {
 'use strict';
+
 // App State
 const States = Object.freeze({
     idle: 'idle',
@@ -20,286 +21,315 @@ const States = Object.freeze({
     processing: 'processing',
     results: 'results'
 });
-let state = States.idle;
+let currentState = 'idle';
+
 // Media and processing
 let stream = null;
 let currentBlob = null;
-let zoomLevel = 0;
-let track = null;
-let imageCapture = null;
-// DOM (must exist in HTML)
+let zoom = 1.0;
+let isScanning = false;
+
+// DOM elements
 const dom = {};
 const qs = (id) => document.getElementById(id);
+
 function cacheDom() {
     dom.btnScan = qs('scanBtn');
     dom.status = qs('status');
     dom.video = qs('videoPreview');
-    dom.canvas = qs('captureCanvas');
-    dom.resultContainer = qs('resultContainer');
-    dom.ocrText = qs('ocrText');
-    dom.llmInterpretation = qs('llmInterpretation');
-    dom.emailSentMsg = qs('emailSentMsg');
-    dom.nextScanBtn = qs('nextScanBtn');
-    dom.thinkingGif = qs('thinkingGif');
+    dom.canvas = qs('canvas');
     dom.previewImg = qs('previewImg');
-}
-function ensureDom(){ if(Object.keys(dom).length===0) cacheDom(); }
-function setStatus(txt) { if (dom.status) dom.status.textContent = txt; }
-function showThinking(show){ if(dom.thinkingGif) dom.thinkingGif.style.display = show ? 'block' : 'none'; }
-function showNextScan(show){ if(dom.nextScanBtn) dom.nextScanBtn.style.display = show ? 'block' : 'none'; }
-// State machine
-function setState(newState) { state = newState; renderState(); }
-function renderState() {
-    if(!dom.btnScan || !dom.video || !dom.resultContainer) return;
-    switch(state){
-      case States.idle:     dom.btnScan.style.display='block'; dom.video.style.display='none'; dom.resultContainer.style.display='none'; setStatus(''); break;
-      case States.camera:   dom.btnScan.style.display='none'; dom.video.style.display='block'; dom.resultContainer.style.display='none'; setStatus('Tap video to capture'); break;
-      case States.processing: dom.btnScan.style.display='none'; dom.video.style.display='none'; dom.resultContainer.style.display='none'; setStatus('Processing...'); break;
-      case States.results: dom.btnScan.style.display='none'; dom.video.style.display='none'; dom.resultContainer.style.display='block'; setStatus('Results'); break;
-    }
-}
-// Rabbit LLM Utilities
-async function analyzeData(prompt, data) {
-    if (!window.r1 || !window.r1.messaging || typeof window.r1.messaging.askLLMJSON !== 'function') {
-        throw new Error('Rabbit r1.messaging.askLLMJSON not available');
-    }
-    let message = prompt;
-    if (data) {
-        message += ` Data: ${JSON.stringify(data)}`;
-    }
-    message += ' Please respond with a JSON analysis.';
-    await window.r1.messaging.askLLMJSON(message);
-    console.log('Sent to LLM for JSON analysis');
+    dom.results = qs('results');
+    dom.ocrText = qs('ocrText');
+    dom.btnRetake = qs('retakeBtn');
+    dom.btnReset = qs('resetBtn');
+    dom.btnEmail = qs('emailBtn');
 }
 
-async function textToSpeech(text, saveToJournal = false) {
-    if (!window.r1 || !window.r1.messaging || typeof window.r1.messaging.speakText !== 'function') {
-        throw new Error('Rabbit r1.messaging.speakText not available');
-    }
-    await window.r1.messaging.speakText(text, { wantsJournalEntry: saveToJournal });
-    console.log('Text sent to speech:', text);
-}
-// Camera
-async function startCamera(){
-    if (stream) return true;
+// === CAMERA ===
+async function startCamera() {
     try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        track = stream.getVideoTracks()[0];
-        const caps = track.getCapabilities();
-        if (caps.zoom) { zoomLevel = caps.zoom.min; }
-        imageCapture = new ImageCapture(track);
+        currentState = 'camera';
+        updateUI();
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
+        });
         dom.video.srcObject = stream;
         await dom.video.play();
-        return true;
+        zoom = 1.0;
     } catch (err) {
-        console.error('Camera error:', err);
-        setStatus('Camera access denied or unavailable.');
-        return false;
+        console.error('[CAMERA] Error:', err);
+        alert('Camera error: ' + err);
+        reset();
     }
 }
-function stopCamera(){ 
-    if(!stream) return; 
-    stream.getTracks().forEach(t=>t.stop()); 
-    if (dom.video) dom.video.srcObject = null;
-    stream = null; 
-    track = null; 
-    imageCapture = null; 
-}
-function applyZoom(delta){ 
-    if (!track || !imageCapture) return;
-    const caps = track.getCapabilities(); 
-    if (!caps.zoom) return;
-    zoomLevel = Math.max(caps.zoom.min, Math.min(caps.zoom.max, zoomLevel + delta));
-    track.applyConstraints({ advanced: [{ zoom: zoomLevel }] });
-}
-// OCR
-async function runOCR(blob){
-    if (!window.Tesseract) throw new Error('Tesseract not loaded');
-    const { data: { text } } = await window.Tesseract.recognize(blob, 'deu+eng', { logger: m => console.log(m) });
-    return text.trim();
-}
-// AI
-async function sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText) {
-    if (!window.PluginMessageHandler || !window.PluginMessageHandler.postMessage) {
-        throw new Error('Rabbit PluginMessageHandler not available');
+
+function stopCamera() {
+    try {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        if (dom.video) dom.video.srcObject = null;
+    } catch (e) {
+        console.warn('[CAMERA] stop error', e);
     }
-    window.PluginMessageHandler.postMessage(JSON.stringify({
-        useLLM: true,
-        message: prompt,
-        imageDataUrl: dataUrl,
-        ocrText: ocrText
-    }));
-    console.log('Sent to LLM with embedded image & OCR text');
 }
-// Email (via PluginMessageHandler)
-async function sendEmailViaHandler(subject, body) {
-    if (!window.PluginMessageHandler || !window.PluginMessageHandler.postMessage) {
-        throw new Error('Rabbit PluginMessageHandler not available');
+
+// === CAPTURE ===
+function captureImage() {
+    if (currentState !== 'camera' || isScanning) return;
+    if (!dom.video || !dom.canvas) {
+        alert('Camera not ready');
+        return;
     }
-    window.PluginMessageHandler.postMessage(JSON.stringify({
-        sendEmail: true,
-        subject: subject,
-        body: body
-    }));
-    console.log('Email request sent via PluginMessageHandler');
-}
-// Photo capture: use hardware API if available, otherwise fallback to ImageCapture
-async function takePhoto() {
-    // Try hardware camera API first
-    if (window.r1 && window.r1.camera && typeof window.r1.camera.capturePhoto === 'function') {
-        console.log('Using r1.camera.capturePhoto hardware API');
-        try {
-            const result = await window.r1.camera.capturePhoto(240, 282);
-            // Check if result is valid (Blob or has data)
-            if (!result) {
-                console.warn('r1.camera.capturePhoto returned empty result, falling back');
-                throw new Error('Hardware camera returned no data');
-            }
-            // If result is already a Blob, return it
-            if (result instanceof Blob) {
-                return result;
-            }
-            // If result is a data URL or base64, convert to Blob
-            if (typeof result === 'string' && result.startsWith('data:')) {
-                const response = await fetch(result);
-                return await response.blob();
-            }
-            // Otherwise assume it's valid and return
-            return result;
-        } catch (hwErr) {
-            console.error('Hardware camera API failed:', hwErr);
-            setStatus('Hardware camera failed, trying fallback...');
-            // Fall through to standard ImageCapture
-        }
-    }
-    // Fallback to standard ImageCapture
-    if (imageCapture) {
-        console.log('Using standard ImageCapture API');
-        try {
-            return await imageCapture.takePhoto();
-        } catch (icErr) {
-            console.error('ImageCapture failed:', icErr);
-            throw new Error('Camera capture failed');
-        }
-    }
-    // No capture method available
-    throw new Error('No camera available');
-}
-// Main processing
-async function captureAndProcess() {
-  if (state !== States.camera) return;
-  setState(States.processing);
-  stopCamera();
-  showThinking(true);
-  
-  try {
-    const blob = await takePhoto();
-    currentBlob = blob;
-    const url = URL.createObjectURL(blob);
-    if (dom.previewImg) dom.previewImg.src = url;
     
-    // Tesseract OCR starten
-    const ocrText = await runOCR(blob);
-    if (dom.ocrText) dom.ocrText.textContent = ocrText || '(no text found)';
+    // Classic video/canvas capture
+    dom.canvas.width = dom.video.videoWidth;
+    dom.canvas.height = dom.video.videoHeight;
+    dom.canvas.getContext('2d').drawImage(dom.video, 0, 0);
+    const image = dom.canvas.toDataURL('image/jpeg', 0.9);
     
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const dataUrl = reader.result;
-      const prompt = "Analyse the photo you just took and extract all the data from it. Then send it to me by email (neatly formatted). ";
-      await sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText);
-      if (dom.llmInterpretation) {
-        dom.llmInterpretation.textContent = 'Sent to LLM. Check Rabbit hub for response.';
-      }
-    };
-    reader.readAsDataURL(blob);
-    
-    showThinking(false);
-    showNextScan(true);
-    setState(States.results);
-  } catch (err) {
-    console.error('Processing error:', err);
-    // User-friendly error messages
-    let userMessage = 'Error processing photo.';
-    if (err.message === 'No camera available') {
-      userMessage = 'Camera not available. Please enable camera access.';
-    } else if (err.message === 'Camera capture failed') {
-      userMessage = 'Failed to capture photo. Please try again.';
-    } else if (err.message.includes('Tesseract')) {
-      userMessage = 'OCR engine not loaded. Please refresh.';
+    // Store image and update state
+    if (window.storage) {
+        window.storage.set('r1.lastImage', image);
     }
-    setStatus(userMessage);
-    showThinking(false);
-    setState(States.idle);
-  }
-}
-// User actions
-async function onScan() {
-    if (state !== States.idle) return;
-    const ok = await startCamera();
-    if (ok) setState(States.camera);
-}
-function onReset(){
+    
     stopCamera();
-    if (dom.previewImg) dom.previewImg.src = '';
-    if (dom.ocrText) dom.ocrText.textContent = '';
-    if (dom.llmInterpretation) dom.llmInterpretation.textContent = '';
-    if (dom.emailSentMsg) dom.emailSentMsg.style.display = 'none';
-    currentBlob = null;
-    showThinking(false);
-    showNextScan(false);
-    setState(States.idle);
-}
-function onWheel(e){
-    if(state!==States.camera) return;
-    e.preventDefault();
-    const d = e.deltaY<0 ? +1 : -1;
-    applyZoom(d);
-}
-// Hardware/keyboard
-function onKeyDown(e){
-    if(state===States.camera && (e.key==='v'||e.key===' '||e.key==='Enter'||e.code==='VolumeDown'||e.code==='VolumeUp')){
-        e.preventDefault();
-        captureAndProcess();
-    }
-    if(e.key==='Escape'){
-        e.preventDefault();
-        onReset();
-    }
-    if(state===States.results && e.key.toLowerCase()==='r'){
-        e.preventDefault();
-        onReset();
-    }
-}
-// Bind events
-function bindEvents(){
-    dom.btnScan?.addEventListener('click', onScan);
-    dom.nextScanBtn?.addEventListener('click', onReset);
-    // Click on video triggers capture
-    dom.video?.addEventListener('click', () => { if(state===States.camera) captureAndProcess(); });
-    dom.video?.addEventListener('wheel', onWheel, { passive: false });
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('visibilitychange', () => { if(document.hidden) onReset(); });
-}
-function init(){ 
-    ensureDom(); 
-    bindEvents();
-    setState(States.idle);
     
-    // Initialize deviceControls if available
-    if (window.deviceControls) {
-      deviceControls.init({
-        sideButtonEnabled: true,
-        scrollWheelEnabled: true,
-        keyboardFallback: true
-      });
-      deviceControls.on('sideButton', () => {
-        if(state === States.camera) captureAndProcess();
-      });
-      deviceControls.on('scrollWheel', (data) => {
-        // Optional: Nutzen für spätere Features
-        console.log('Scrolled', data.direction);
-      });
+    if (dom.previewImg) dom.previewImg.src = image;
+    currentState = 'preview';
+    updateUI();
+    
+    // Process OCR with captured image
+    processOCR(image);
+}
+
+// === OCR PROCESSING ===
+async function processOCR(imageData) {
+    try {
+        isScanning = true;
+        currentState = 'processing';
+        updateUI();
+        
+        updateStatus('Scanning receipt...');
+        
+        // Initialize Tesseract if not already done
+        if (!window.tesseractWorker) {
+            updateStatus('Loading OCR engine...');
+            window.tesseractWorker = await Tesseract.createWorker('deu+eng');
+        }
+        
+        const { data: { text } } = await window.tesseractWorker.recognize(imageData);
+        
+        displayResults(text, imageData);
+        
+    } catch (error) {
+        console.error('[OCR] Error:', error);
+        alert('OCR processing failed: ' + error.message);
+        reset();
+    } finally {
+        isScanning = false;
     }
 }
-if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', init); } else { init(); }
+
+function displayResults(text, imageData) {
+    currentState = 'results';
+    if (dom.ocrText) dom.ocrText.textContent = text;
+    currentBlob = imageData;
+    updateUI();
+    updateStatus('Receipt scanned successfully!');
+}
+
+// === UI MANAGEMENT ===
+function updateUI() {
+    if (!dom.btnScan) return;
+    
+    // Hide all elements first
+    const elements = [dom.btnScan, dom.video, dom.canvas, dom.previewImg, dom.results];
+    elements.forEach(el => el && (el.style.display = 'none'));
+    
+    switch (currentState) {
+        case 'idle':
+            if (dom.btnScan) dom.btnScan.style.display = 'block';
+            break;
+        case 'camera':
+            if (dom.video) dom.video.style.display = 'block';
+            break;
+        case 'processing':
+            if (dom.previewImg) dom.previewImg.style.display = 'block';
+            break;
+        case 'preview':
+        case 'results':
+            if (dom.previewImg) dom.previewImg.style.display = 'block';
+            if (dom.results) dom.results.style.display = 'block';
+            break;
+    }
+}
+
+function updateStatus(message) {
+    console.log('[STATUS]', message);
+    if (dom.status) dom.status.textContent = message;
+}
+
+function reset() {
+    stopCamera();
+    currentState = 'idle';
+    isScanning = false;
+    currentBlob = null;
+    updateUI();
+    updateStatus('Ready to scan');
+}
+
+// === EVENT HANDLERS ===
+function setupEventListeners() {
+    // Scan button
+    if (dom.btnScan) {
+        dom.btnScan.addEventListener('click', startCamera);
+    }
+    
+    // Video click for capture
+    if (dom.video) {
+        dom.video.addEventListener('click', captureImage);
+    }
+    
+    // Retake button
+    if (dom.btnRetake) {
+        dom.btnRetake.addEventListener('click', startCamera);
+    }
+    
+    // Reset button
+    if (dom.btnReset) {
+        dom.btnReset.addEventListener('click', reset);
+    }
+    
+    // Email button
+    if (dom.btnEmail) {
+        dom.btnEmail.addEventListener('click', sendEmail);
+    }
+    
+    // Keyboard events for Rabbit R1
+    document.addEventListener('keydown', (e) => {
+        switch (e.key) {
+            case 'v':
+            case ' ':
+            case 'Enter':
+                if (currentState === 'idle') startCamera();
+                else if (currentState === 'camera') captureImage();
+                break;
+            case 'Escape':
+                reset();
+                break;
+        }
+    });
+}
+
+// === EMAIL INTEGRATION ===
+function sendEmail() {
+    if (!currentBlob) {
+        alert('No receipt to send');
+        return;
+    }
+    
+    const text = dom.ocrText ? dom.ocrText.textContent : '';
+    
+    // Rabbit Plugin Message Handler
+    if (window.PluginMessageHandler) {
+        window.PluginMessageHandler({
+            action: 'email',
+            subject: 'Receipt Scan',
+            body: `Receipt text:\n${text}`,
+            attachments: [{
+                name: 'receipt.jpg',
+                data: currentBlob
+            }]
+        });
+    }
+}
+
+// === RABBIT R1 INTEGRATIONS ===
+
+// Hardware camera API fallback
+if (window.r1 && window.r1.camera) {
+    window.r1.camera.onCaptureResult = function(result) {
+        if (result.success && result.dataUrl) {
+            if (dom.previewImg) dom.previewImg.src = result.dataUrl;
+            currentState = 'preview';
+            updateUI();
+            processOCR(result.dataUrl);
+        }
+    };
+}
+
+// Device controls
+if (window.deviceControls) {
+    window.deviceControls.sideButton.onPress = () => {
+        if (currentState === 'idle') startCamera();
+        else if (currentState === 'camera') captureImage();
+    };
+    
+    window.deviceControls.scrollWheel.onScroll = (delta) => {
+        if (currentState === 'camera' && stream) {
+            zoom = Math.max(1.0, Math.min(3.0, zoom + delta * 0.1));
+            // Apply zoom if supported
+        }
+    };
+}
+
+// Storage utility
+window.storage = {
+    set: (key, value) => {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            console.warn('[STORAGE] Set failed:', e);
+        }
+    },
+    get: (key) => {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            console.warn('[STORAGE] Get failed:', e);
+            return null;
+        }
+    }
+};
+
+// === INITIALIZATION ===
+function init() {
+    cacheDom();
+    setupEventListeners();
+    reset();
+    
+    // Load Tesseract.js
+    if (!window.Tesseract && typeof importScripts !== 'function') {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/tesseract.js@v4/dist/tesseract.min.js';
+        document.head.appendChild(script);
+    }
+}
+
+// Start when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
+
+// Rabbit LLM integration utilities
+window.analyzeData = function(data, callback) {
+    // Placeholder for Rabbit LLM analysis
+    if (callback) callback({ analyzed: true, data });
+};
+
+window.textToSpeech = function(text) {
+    try {
+        const utterance = new SpeechSynthesisUtterance(text);
+        speechSynthesis.speak(utterance);
+    } catch (e) {
+        console.warn('[TTS] Failed:', e);
+    }
+};
+
 })();
