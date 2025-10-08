@@ -189,9 +189,9 @@ async function init() {
     // Start camera
     await startCamera();
     
-    // Add click event to scan button
+    // Add click event to scan button to start camera
     if (scanButton) {
-        scanButton.addEventListener('click', captureAndScan);
+        scanButton.addEventListener('click', startCamera);
     }
     
     setStatus('Bereit zum Scannen');
