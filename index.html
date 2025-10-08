@@ -126,24 +126,20 @@
   </style>
 </head>
 <body>
-  <div class="header">🐰 RABBIT RECEIPT SCANNER</div>
-
+  <div class="header">🥕 RABBIT RECEIPT SCANNER</div>
   <div class="content">
     <!-- centered in the content container -->
     <canvas id="captureCanvas" style="display:none"></canvas>
-
     <div id="buttonCameraContainer">
       <button id="scanBtn">
-        <img alt="Kamera" src="rabbit.png" />
+        <img src="r1-cam.png" width="110" height="110" style="display:block;margin:0 auto;" alt="Kamera">
         BELEG SCANNEN
       </button>
-      <video id="videoPreview" autoplay muted playsinline></video>
+      <video id="videoPreview" autoplay playsinline muted></video>
     </div>
-
     <div id="cameraHint" class="camera-hint"></div>
     <div id="status" class="status">Bereit zum Scannen</div>
   </div>
-
   <script src="main.js"></script>
 </body>
 </html>
