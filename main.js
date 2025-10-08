@@ -10,7 +10,8 @@
 */
 (function() {
   'use strict';
-  // App State
+
+// App State
   const States = Object.freeze({
     idle: 'idle',
     camera: 'camera',
@@ -18,13 +19,15 @@
     results: 'results'
   });
   let state = States.idle;
-  // Media and processing
+
+// Media and processing
   let stream = null;
   let currentBlob = null;
   let zoomLevel = 0;
   let track = null;
   let imageCapture = null;
-  // DOM (must exist in HTML)
+
+// DOM (must exist in HTML)
   const dom = {};
   function qs(id) { return document.getElementById(id); }
   function cacheDom() {
@@ -34,20 +37,19 @@
     dom.canvas = qs('captureCanvas');
     dom.resultContainer = qs('resultContainer');
     dom.ocrText = qs('ocrText');
-    dom.capturedImage = qs('capturedImage');
-    dom.thinkingGif = qs('thinkingGif');
+    dom.llmInterpretation = qs('llmInterpretation');
+    dom.emailSentMsg = qs('emailSentMsg');
     dom.nextScanBtn = qs('nextScanBtn');
+    dom.thinkingGif = qs('thinkingGif');
+    dom.previewImg = qs('previewImg');
   }
   function ensureDom() {
-    cacheDom();
-    const missing = Object.entries(dom).filter(([k, v]) => !v).map(([k]) => k);
-    if (missing.length > 0) {
-      console.error('Missing DOM elements:', missing.join(', '));
-    }
+    if (Object.keys(dom).length === 0) cacheDom();
   }
-  function updateStatus(text) {
-    if (dom.status) dom.status.textContent = text;
-    console.log('Status:', text);
+
+// UI helpers
+  function setStatus(txt) {
+    if (dom.status) dom.status.textContent = txt;
   }
   function showThinking(show) {
     if (!dom.thinkingGif) return;
@@ -55,197 +57,182 @@
   }
   function showNextScan(show) {
     if (!dom.nextScanBtn) return;
-    dom.nextScanBtn.style.display = show ? 'inline-block' : 'none';
+    dom.nextScanBtn.style.display = show ? 'block' : 'none';
   }
-  // State machine
+
+// State machine
   function setState(newState) {
-    console.log('State transition:', state, '→', newState);
     state = newState;
-    // Button vs video visibility
-    if (dom.btnScan) dom.btnScan.style.display = (state === States.idle) ? 'block' : 'none';
-    if (dom.video) {
-      dom.video.style.display = (state === States.camera) ? 'block' : 'none';
-      dom.video.style.pointerEvents = (state === States.camera) ? 'auto' : 'none';
-    }
-    if (dom.resultContainer) {
-      dom.resultContainer.style.display = (state === States.results) ? 'block' : 'none';
-    }
-    // Thinking GIF visibility by state
-    if (state === States.processing) showThinking(true); else showThinking(false);
-    // Next Scan button visibility by state
-    showNextScan(state === States.results);
-    // Status updates
-    if (state === States.idle) updateStatus('Ready to scan');
-    else if (state === States.camera) updateStatus('Camera active - Click video or press PTT to capture');
-    else if (state === States.processing) updateStatus('Processing image...');
+    renderState();
   }
-  // Camera start
+  function renderState() {
+    if (!dom.btnScan || !dom.video || !dom.resultContainer) return;
+    switch (state) {
+      case States.idle:
+        dom.btnScan.style.display = 'block';
+        dom.video.style.display = 'none';
+        dom.resultContainer.style.display = 'none';
+        setStatus('');
+        break;
+      case States.camera:
+        dom.btnScan.style.display = 'none';
+        dom.video.style.display = 'block';
+        dom.resultContainer.style.display = 'none';
+        setStatus('Click on video or press [V] to capture');
+        break;
+      case States.processing:
+        dom.video.style.display = 'none';
+        dom.resultContainer.style.display = 'none';
+        setStatus('Processing...');
+        break;
+      case States.results:
+        dom.video.style.display = 'none';
+        dom.resultContainer.style.display = 'block';
+        setStatus('Results below. Press [R] or Esc to start over.');
+        break;
+    }
+  }
+
+// Camera
   async function startCamera() {
+    if (stream) return true;
     try {
-      setState(States.camera);
-      const constraints = {
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-      if (!dom.video) throw new Error('Video element missing');
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }});
+      track = stream.getVideoTracks()[0];
+      const caps = track.getCapabilities();
+      if (caps.zoom) {
+        zoomLevel = caps.zoom.min;
+      }
+      imageCapture = new ImageCapture(track);
       dom.video.srcObject = stream;
       await dom.video.play();
-      track = stream.getVideoTracks()[0];
-      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-      if (capabilities.zoom) {
-        imageCapture = new ImageCapture(track);
-        console.log('Zoom range:', capabilities.zoom);
-      } else {
-        console.log('Zoom not supported by camera');
-      }
-      updateStatus('Camera ready - Click video to capture');
+      return true;
     } catch (err) {
       console.error('Camera error:', err);
-      updateStatus('Camera error: ' + err.message);
-      onReset();
-    }
-  }
-  function applyZoom(direction) {
-    if (!track || !imageCapture) return;
-    const capabilities = track.getCapabilities();
-    if (!capabilities.zoom) return;
-    const settings = track.getSettings();
-    const currentZoom = settings.zoom || 1;
-    const step = (capabilities.zoom.max - capabilities.zoom.min) / 10;
-    let newZoom = currentZoom + (direction * step);
-    newZoom = Math.max(capabilities.zoom.min, Math.min(capabilities.zoom.max, newZoom));
-    track.applyConstraints({ advanced: [{ zoom: newZoom }] })
-      .then(() => {
-        zoomLevel = newZoom;
-        console.log('Zoom set to:', newZoom);
-      })
-      .catch(err => console.error('Zoom error:', err));
-  }
-  async function captureAndProcess() {
-    if (state !== States.camera) return;
-    setState(States.processing); // will show thinking GIF
-    try {
-      if (!dom.canvas || !dom.video) throw new Error('Canvas or video missing');
-      const ctx = dom.canvas.getContext('2d');
-      dom.canvas.width = dom.video.videoWidth;
-      dom.canvas.height = dom.video.videoHeight;
-      ctx.drawImage(dom.video, 0, 0);
-      currentBlob = await new Promise(resolve => dom.canvas.toBlob(resolve, 'image/jpeg', 0.95));
-      if (!currentBlob) throw new Error('Capture failed');
-      const dataUrl = await blobToDataURL(currentBlob);
-      if (dom.capturedImage) {
-        dom.capturedImage.src = dataUrl;
-        dom.capturedImage.style.display = 'block';
-      }
-      updateStatus('Running OCR...');
-      await runOCR(dataUrl);
-    } catch (err) {
-      console.error('Capture/process error:', err);
-      updateStatus('Error: ' + err.message);
-      onReset();
-    }
-  }
-  function blobToDataURL(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-  async function runOCR(dataUrl) {
-    try {
-      updateStatus('OCR in progress...');
-      // Ensure GIF is visible while OCR runs
-      showThinking(true);
-      const result = await Tesseract.recognize(dataUrl, 'deu+eng', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            updateStatus(`OCR: ${Math.round(m.progress * 100)}%`);
-          }
-        }
-      });
-      const text = result.data.text.trim();
-      console.log('OCR result:', text);
-      if (dom.ocrText) {
-        dom.ocrText.textContent = text || '(No text detected)';
-      }
-      updateStatus('OCR complete - Sending to AI...');
-      await sendToAIWithEmbeddedDataUrl(dataUrl, text);
-      setState(States.results); // will hide GIF and show Next Scan
-    } catch (err) {
-      console.error('OCR error:', err);
-      updateStatus('OCR failed: ' + err.message);
-      setState(States.results); // hide GIF, allow next scan
-    }
-  }
-  // Modified function to send email action with embedded dataUrl via LLM only
-  async function sendToAIWithEmbeddedDataUrl(dataUrl, ocrText) {
-    // Construct the prompt for the LLM
-const prompt = `You are an assistant. Your task: Email me the text and a summary from the attached receipt image.
-STRICT RULE: Only extract information you 100% read via OCR from THIS image. Do NOT invent, guess, or fill in missing data from other sources or your own logic! If OCR finds nothing, state: 'No data recognized.'
-Return ONLY valid JSON in this exact format: {"action":"email","subject":"Receipt Scan","body":"Summary: ...\\nOCR Text: ...","attachments":[{"dataUrl":"<dataUrl>"}]}`;
-     
-    // Construct the complete payload with embedded dataUrl
-    const payload = {
-      useLLM: true,
-      message: prompt,
-      imageDataUrl: dataUrl
-    };
-    
-    console.log('Sending to Rabbit LLM:', payload);
-    updateStatus('Sending to Rabbit AI...');
-    
-    // Check if PluginMessageHandler is available (Rabbit R1 environment)
-    if (typeof PluginMessageHandler !== 'undefined' && PluginMessageHandler.postMessage) {
-      try {
-        // Send the complete payload to Rabbit LLM
-        PluginMessageHandler.postMessage(JSON.stringify(payload));
-        console.log('Successfully sent to PluginMessageHandler');
-        updateStatus('Sent to Rabbit AI!');
-        return true;
-      } catch (err) {
-        console.error('PluginMessageHandler error:', err);
-        updateStatus('Failed to send to Rabbit AI');
-        return false;
-      }
-    } else {
-      console.warn('PluginMessageHandler not available (running outside Rabbit environment)');
-      updateStatus('Rabbit AI not available (browser mode)');
+      setStatus('Camera access denied or unavailable.');
       return false;
     }
   }
-  function onScan() {
-    if (state !== States.idle) return;
-    startCamera();
-  }
-  function onReset() {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      stream = null;
-    }
+  function stopCamera() {
+    if (!stream) return;
+    stream.getTracks().forEach(t => t.stop());
     if (dom.video) dom.video.srcObject = null;
+    stream = null;
     track = null;
     imageCapture = null;
-    zoomLevel = 1;
+  }
+
+// Zoom
+  function applyZoom(delta) {
+    if (!track || !imageCapture) return;
+    const caps = track.getCapabilities();
+    if (!caps.zoom) return;
+    zoomLevel = Math.max(caps.zoom.min, Math.min(caps.zoom.max, zoomLevel + delta));
+    track.applyConstraints({ advanced: [{ zoom: zoomLevel }] });
+  }
+
+// OCR
+  async function runOCR(blob) {
+    if (!window.Tesseract) throw new Error('Tesseract not loaded');
+    const { data: { text }} = await window.Tesseract.recognize(blob, 'deu+eng', {
+      logger: m => console.log(m)
+    });
+    return text.trim();
+  }
+
+// AI
+  async function sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText) {
+    if (!window.PluginMessageHandler || !window.PluginMessageHandler.postMessage) {
+      throw new Error('Rabbit PluginMessageHandler not available');
+    }
+    window.PluginMessageHandler.postMessage(JSON.stringify({
+      useLLM: true,
+      message: prompt,
+      imageDataUrl: dataUrl,
+      ocrText: ocrText
+    }));
+    console.log('Sent to LLM with embedded image & OCR text');
+  }
+
+// Email (via PluginMessageHandler)
+  async function sendEmailViaHandler(subject, body) {
+    if (!window.PluginMessageHandler || !window.PluginMessageHandler.postMessage) {
+      throw new Error('Rabbit PluginMessageHandler not available');
+    }
+    window.PluginMessageHandler.postMessage(JSON.stringify({
+      sendEmail: true,
+      subject: subject,
+      body: body
+    }));
+    console.log('Email request sent via PluginMessageHandler');
+  }
+
+// Main processing
+  async function captureAndProcess() {
+    if (state !== States.camera || !imageCapture) return;
+    setState(States.processing);
+    stopCamera();
+    showThinking(true);
+    try {
+      const blob = await imageCapture.takePhoto();
+      currentBlob = blob;
+      const url = URL.createObjectURL(blob);
+      if (dom.previewImg) dom.previewImg.src = url;
+
+      const ocrText = await runOCR(blob);
+      if (dom.ocrText) dom.ocrText.textContent = ocrText || '(no text found)';
+
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const dataUrl = reader.result;
+        const prompt = "This is a receipt image. Extract: merchant, date, items, total. Return as JSON.";
+        await sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText);
+
+        if (dom.llmInterpretation) {
+          dom.llmInterpretation.textContent = 'Sent to LLM. Check Rabbit hub for response.';
+        }
+      };
+      reader.readAsDataURL(blob);
+
+      showThinking(false);
+      showNextScan(true);
+      setState(States.results);
+    } catch (err) {
+      console.error('Processing error:', err);
+      setStatus('Error: ' + err.message);
+      showThinking(false);
+      setState(States.idle);
+    }
+  }
+
+// User actions
+  async function onScan() {
+    if (state !== States.idle) return;
+    const ok = await startCamera();
+    if (ok) setState(States.camera);
+  }
+  function onReset() {
+    stopCamera();
+    if (dom.previewImg) dom.previewImg.src = '';
+    if (dom.ocrText) dom.ocrText.textContent = '';
+    if (dom.llmInterpretation) dom.llmInterpretation.textContent = '';
+    if (dom.emailSentMsg) dom.emailSentMsg.style.display = 'none';
     currentBlob = null;
     // hide thinking GIF and next button on reset
     showThinking(false);
     showNextScan(false);
     setState(States.idle);
   }
-  // Mouse wheel zoom over video
+
+// Mouse wheel zoom over video
   function onWheel(e) {
     if (state !== States.camera) return;
     e.preventDefault();
     const delta = e.deltaY < 0 ? +1 : -1;
     applyZoom(delta);
   }
-  // Hardware events: PTT capture (Rabbit R1 compatible)
+
+// Hardware events: PTT capture (Rabbit R1 compatible)
   function onKeyDown(e) {
     // PTT triggers in camera state
     if (state === States.camera && 
@@ -265,7 +252,8 @@ Return ONLY valid JSON in this exact format: {"action":"email","subject":"Receip
       onReset();
     }
   }
-  // Bind events
+
+// Bind events
   function bindEvents() {
     dom.btnScan?.addEventListener('click', onScan);
     dom.nextScanBtn?.addEventListener('click', onReset);
@@ -280,11 +268,13 @@ Return ONLY valid JSON in this exact format: {"action":"email","subject":"Receip
       if (document.hidden) onReset();
     });
   }
+
   function init() {
     ensureDom();
     bindEvents();
     setState(States.idle);
   }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
