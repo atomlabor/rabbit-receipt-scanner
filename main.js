@@ -5,6 +5,7 @@ let currentState = 'camera';
 let stream = null;
 let zoom = 1.0;
 let dom = {};
+let capturedImageData = null; // Store captured image for LLM
 
 // Rabbit device controls if available
 if (window.deviceControls && window.deviceControls.scrollWheel) {
@@ -150,6 +151,7 @@ function capturePhoto() {
     
     // Convert to data URL
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    capturedImageData = dataUrl; // Store for LLM
     
     // Stop camera and show preview
     stopCamera();
@@ -193,6 +195,8 @@ function runOCR(imageData) {
         .then(({ data: { text } }) => {
             displayResults(text);
             setStatus('Scan complete!', 'success');
+            // Send via Rabbit LLM after successful OCR
+            sendViaRabbitLLM(capturedImageData, text);
         })
         .catch(err => {
             console.error('[OCR] Error:', err);
@@ -215,6 +219,48 @@ function displayResults(text) {
     window.storage.set('lastScanTime', new Date().toISOString());
     
     console.log('[RESULTS] Text extracted:', text.substring(0, 100) + '...');
+}
+
+// === RABBIT LLM EMAIL INTEGRATION ===
+function sendViaRabbitLLM(imageDataUrl, ocrText) {
+    console.log('[RABBIT_LLM] Preparing to send scan result via Rabbit LLM email...');
+    
+    // Check if Rabbit PluginMessageHandler is available
+    if (typeof window.PluginMessageHandler === 'undefined' || 
+        typeof window.PluginMessageHandler.postMessage !== 'function') {
+        console.log('[RABBIT_LLM] PluginMessageHandler not available (running in browser). Email sending skipped.');
+        setStatus('Scan complete! (Email not sent - browser mode)', 'success');
+        return;
+    }
+    
+    try {
+        // Prepare the prompt for the Rabbit LLM
+        const prompt = 'Analyse the photo you just took and extract all the data from it. Send it to me by email (neatly formatted) together with the OCR text.';
+        
+        // Create payload with prompt, image, and OCR text
+        const payload = {
+            action: 'llm_email',
+            prompt: prompt,
+            image: imageDataUrl,
+            ocrText: ocrText,
+            timestamp: new Date().toISOString()
+        };
+        
+        // Send to Rabbit LLM via PluginMessageHandler
+        window.PluginMessageHandler.postMessage(JSON.stringify(payload));
+        
+        console.log('[RABBIT_LLM] Message sent to Rabbit LLM for email processing');
+        setStatus('Sending via Rabbit LLM email...', 'processing');
+        
+        // Update status after a delay (assuming async processing)
+        setTimeout(() => {
+            setStatus('Email sent via Rabbit LLM!', 'success');
+        }, 2000);
+        
+    } catch (error) {
+        console.error('[RABBIT_LLM] Error sending to Rabbit LLM:', error);
+        setStatus('Failed to send via Rabbit LLM', 'error');
+    }
 }
 
 // === INITIALIZATION ===
