@@ -1,3 +1,5 @@
+import { deviceControls } from 'r1-create';
+
 /* Rabbit Receipt Scanner
 Key fixes:
 - Scan button completely replaced by video preview when camera starts
@@ -7,6 +9,8 @@ Key fixes:
 - Rabbit R1 hardware events: PTT (volume keys, 'v', space, enter), Escape for reset
 - Tesseract OCR with deu+eng
 - Rabbit PluginMessageHandler integration with embedded dataUrl and email action
+- deviceControls API: sideButton, scrollWheel with full feature set
+- r1.camera.capturePhoto() hardware camera API support
 */
 (function() {
 'use strict';
@@ -133,15 +137,30 @@ async function sendEmailViaHandler(subject, body) {
     console.log('Email request sent via PluginMessageHandler');
 }
 
+// Photo capture: use hardware API if available, otherwise fallback to ImageCapture
+async function takePhoto() {
+    // Try hardware camera API first
+    if (window.r1 && window.r1.camera && typeof window.r1.camera.capturePhoto === 'function') {
+        console.log('Using r1.camera.capturePhoto hardware API');
+        return window.r1.camera.capturePhoto(240, 282);
+    }
+    // Fallback to standard ImageCapture
+    if (imageCapture) {
+        console.log('Using standard ImageCapture API');
+        return await imageCapture.takePhoto();
+    }
+    throw new Error('No camera capture method available');
+}
+
 // Main processing
 async function captureAndProcess() {
-  if (state !== States.camera || !imageCapture) return;
+  if (state !== States.camera) return;
   setState(States.processing);
   stopCamera();
   showThinking(true);
   
   try {
-    const blob = await imageCapture.takePhoto();
+    const blob = await takePhoto();
     currentBlob = blob;
     const url = URL.createObjectURL(blob);
     if (dom.previewImg) dom.previewImg.src = url;
@@ -214,6 +233,42 @@ function onKeyDown(e){
     }
 }
 
+// Device controls setup with full feature set
+function setupDeviceControls() {
+    try {
+        // Initialize with options
+        deviceControls.init({
+            sideButtonEnabled: true,
+            scrollWheelEnabled: true,
+            keyboardFallback: true
+        });
+        
+        // Register event handlers
+        deviceControls.on('sideButton', (event) => {
+            console.log('Side button pressed');
+            // Optional: trigger capture if in camera state
+            // if (state === States.camera) captureAndProcess();
+        });
+        
+        deviceControls.on('scrollWheel', (data) => {
+            console.log('Scrolled', data.direction); // 'up' oder 'down'
+            // Optional: use for zoom control
+            if (state === States.camera) {
+                const delta = data.direction === 'up' ? +1 : -1;
+                applyZoom(delta);
+            }
+        });
+        
+        // Set control states as examples
+        deviceControls.setSideButtonEnabled(false);
+        deviceControls.setScrollWheelEnabled(true);
+        
+        console.log('deviceControls initialized successfully with full feature set');
+    } catch (err) {
+        console.warn('deviceControls init failed:', err);
+    }
+}
+
 // Bind events
 function bindEvents(){
     dom.btnScan?.addEventListener('click', onScan);
@@ -225,7 +280,12 @@ function bindEvents(){
     document.addEventListener('visibilitychange', () => { if(document.hidden) onReset(); });
 }
 
-function init(){ ensureDom(); bindEvents(); setState(States.idle); }
+function init(){ 
+    ensureDom(); 
+    bindEvents(); 
+    setupDeviceControls();
+    setState(States.idle); 
+}
 
 if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', init); } else { init(); }
 
