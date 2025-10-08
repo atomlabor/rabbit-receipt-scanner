@@ -7,9 +7,11 @@ let capturedImageData = null;
 
 // DOM elements
 const scanButton = document.getElementById('scanButton');
-const statusElement = document.getElementById('status');
-const outputElement = document.getElementById('output');
+const captureButton = document.getElementById('captureButton');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
 const overlay = document.getElementById('overlay');
+const result = document.getElementById('result');
 
 // Initialize the OCR worker
 async function initializeOCR() {
@@ -20,186 +22,98 @@ async function initializeOCR() {
         console.log('[OCR] Worker initialized successfully');
     } catch (error) {
         console.error('[OCR] Failed to initialize:', error);
-        setStatus('OCR initialization failed');
+        setOverlay('OCR initialization failed');
     }
 }
 
-// Set status message
-function setStatus(message) {
-    if (statusElement) {
-        statusElement.textContent = message;
+// Set overlay message
+function setOverlay(message) {
+    if (overlay) {
+        overlay.innerHTML = `<div class="loading">${message}</div>`;
     }
     console.log('[STATUS]', message);
-}
-
-// Set OCR output text
-function setOutput(text) {
-    if (outputElement) {
-        outputElement.textContent = text || 'Hier erscheint der gescannte Text...';
-    }
-}
-
-// Show overlay with thinking rabbit
-function showOverlay() {
-    if (overlay) {
-        overlay.classList.add('active');
-    }
-}
-
-// Hide overlay
-function hideOverlay() {
-    if (overlay) {
-        overlay.classList.remove('active');
-    }
 }
 
 // Start camera
 async function startCamera() {
     try {
-        const constraints = {
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: { ideal: 'environment' }
-            }
-        };
-        
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        
-        // Get the video element and check if it exists
-        const video = document.getElementById('video');
-        if (!video) {
-            setStatus('Video-Element nicht gefunden');
-            console.error('[CAMERA] Video element not found');
-            return;
-        }
-        
+        setOverlay('Kamera wird gestartet...');
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } 
+        });
         video.srcObject = stream;
-        setStatus('Kamera bereit');
-        console.log('[CAMERA] Camera started successfully');
+        video.classList.add('active');
+        captureButton.classList.add('active');
+        scanButton.style.display = 'none';
+        overlay.innerHTML = '';
+        console.log('[Camera] Started successfully');
     } catch (error) {
-        console.error('[CAMERA] Failed to start camera:', error);
-        setStatus('Kamera-Fehler: ' + error.message);
+        console.error('[Camera] Failed to start:', error);
+        setOverlay('Kamera konnte nicht gestartet werden');
     }
 }
 
-// Capture photo and perform OCR
+// Stop camera
+function stopCamera() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    video.srcObject = null;
+    video.classList.remove('active');
+    captureButton.classList.remove('active');
+}
+
+// Capture and scan
 async function captureAndScan() {
-    if (!stream) {
-        setStatus('Kamera nicht verfügbar');
+    if (!worker) {
+        setOverlay('OCR nicht bereit');
         return;
     }
-    
+
     try {
-        setStatus('Foto wird aufgenommen...');
-        
-        // Create video element to capture frame
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
-        
-        // Wait for video to be ready
-        await new Promise((resolve) => {
-            video.onloadedmetadata = () => resolve();
-        });
-        
-        // Create canvas to capture frame
-        const canvas = document.createElement('canvas');
+        // Capture image from video
         const context = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        capturedImageData = canvas.toDataURL('image/png');
         
-        // Draw the current frame
-        context.drawImage(video, 0, 0);
+        // Stop camera
+        stopCamera();
         
-        // Get image data
-        capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
-        
-        // Stop video
-        video.pause();
-        video.srcObject = null;
-        
-        // Show overlay with thinking rabbit
-        showOverlay();
-        setStatus('OCR wird durchgeführt...');
+        // Show processing message
+        setOverlay('Verarbeite Bild...');
         
         // Perform OCR
-        await performOCR();
+        const { data: { text } } = await worker.recognize(capturedImageData);
         
-    } catch (error) {
-        console.error('[CAPTURE] Failed to capture image:', error);
-        setStatus('Foto-Fehler: ' + error.message);
-        hideOverlay();
-    }
-}
-
-// Perform OCR on captured image
-async function performOCR() {
-    if (!worker) {
-        setStatus('OCR nicht initialisiert');
-        hideOverlay();
-        return;
-    }
-    
-    if (!capturedImageData) {
-        setStatus('Kein Bild vorhanden');
-        hideOverlay();
-        return;
-    }
-    
-    try {
-        // Perform OCR
-        const result = await worker.recognize(capturedImageData, {
-            logger: (m) => {
-                if (m.status === 'recognizing text') {
-                    setStatus(`OCR: ${Math.round(m.progress * 100)}%`);
-                }
-            }
-        });
+        // Display result
+        overlay.innerHTML = '';
+        result.innerHTML = `<strong>OCR Ergebnis:</strong><br><br>${text.replace(/\n/g, '<br>')}`;
+        result.style.display = 'block';
         
-        // Hide overlay
-        hideOverlay();
+        // Show scan button again
+        scanButton.style.display = 'block';
+        scanButton.textContent = 'Erneut scannen';
         
-        // Set results
-        const text = result.data.text.trim();
-        if (text) {
-            setOutput(text);
-            setStatus('OCR abgeschlossen');
-        } else {
-            setOutput('Kein Text erkannt');
-            setStatus('Kein Text gefunden');
-        }
-        
-        console.log('[OCR] Text recognized:', text);
-        
+        console.log('[OCR] Result:', text);
     } catch (error) {
         console.error('[OCR] Recognition failed:', error);
-        setStatus('OCR-Fehler: ' + error.message);
-        hideOverlay();
+        setOverlay('OCR fehlgeschlagen');
+        stopCamera();
+        scanButton.style.display = 'block';
     }
 }
 
-// Initialize the application
-async function init() {
-    console.log('[APP] Initializing Rabbit Receipt Scanner');
-    
-    // Initialize OCR
-    await initializeOCR();
-    
-    // Start camera
-    await startCamera();
-    
-    // Add click event to scan button to start camera
-    if (scanButton) {
-        scanButton.addEventListener('click', startCamera);
-    }
-    
-    setStatus('Bereit zum Scannen');
-}
+// Event listeners
+scanButton.addEventListener('click', () => {
+    result.innerHTML = '';
+    result.style.display = 'none';
+    startCamera();
+});
 
-// Start the application when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
+captureButton.addEventListener('click', captureAndScan);
+
+// Initialize OCR on page load
+initializeOCR();
