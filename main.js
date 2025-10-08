@@ -1,36 +1,41 @@
-/* Rabbit Receipt Scanner - Fixed Camera Preview Implementation
-   Key fixes:
-   - Scan button completely replaced by video preview when camera starts
-   - Video immediately visible in camera state (button hidden)
-   - Click on live video captures photo immediately
-   - Clean state transitions: idle ↔ camera → processing → results → idle
-   - Rabbit R1 hardware events: PTT (volume keys, 'v', space, enter), Escape for reset
-   - Tesseract OCR with deu+eng
-   - Rabbit PluginMessageHandler integration with embedded dataUrl and email action
+/* Rabbit Receipt Scanner
+
+Key fixes:
+- Scan button completely replaced by video preview when camera starts
+- Video immediately visible in camera state (button hidden)
+- Click on live video captures photo immediately
+- Clean state transitions: idle ↔ camera → processing → results → idle
+- Rabbit R1 hardware events: PTT (volume keys, 'v', space, enter), Escape for reset
+- Tesseract OCR with deu+eng
+- Rabbit PluginMessageHandler integration with embedded dataUrl and email action
 */
+
 (function() {
-  'use strict';
+
+'use strict';
 
 // App State
-  const States = Object.freeze({
+const States = Object.freeze({
     idle: 'idle',
     camera: 'camera',
     processing: 'processing',
     results: 'results'
-  });
-  let state = States.idle;
+});
+
+let state = States.idle;
 
 // Media and processing
-  let stream = null;
-  let currentBlob = null;
-  let zoomLevel = 0;
-  let track = null;
-  let imageCapture = null;
+let stream = null;
+let currentBlob = null;
+let zoomLevel = 0;
+let track = null;
+let imageCapture = null;
 
 // DOM (must exist in HTML)
-  const dom = {};
-  function qs(id) { return document.getElementById(id); }
-  function cacheDom() {
+const dom = {};
+const qs = (id) => document.getElementById(id);
+
+function cacheDom() {
     dom.btnScan = qs('scanBtn');
     dom.status = qs('status');
     dom.video = qs('videoPreview');
@@ -42,242 +47,184 @@
     dom.nextScanBtn = qs('nextScanBtn');
     dom.thinkingGif = qs('thinkingGif');
     dom.previewImg = qs('previewImg');
-  }
-  function ensureDom() {
-    if (Object.keys(dom).length === 0) cacheDom();
-  }
+}
 
-// UI helpers
-  function setStatus(txt) {
-    if (dom.status) dom.status.textContent = txt;
-  }
-  function showThinking(show) {
-    if (!dom.thinkingGif) return;
-    dom.thinkingGif.style.display = show ? 'block' : 'none';
-  }
-  function showNextScan(show) {
-    if (!dom.nextScanBtn) return;
-    dom.nextScanBtn.style.display = show ? 'block' : 'none';
-  }
+function ensureDom(){ if(Object.keys(dom).length===0) cacheDom(); }
+function setStatus(txt) { if (dom.status) dom.status.textContent = txt; }
+function showThinking(show){ if(dom.thinkingGif) dom.thinkingGif.style.display = show ? 'block' : 'none'; }
+function showNextScan(show){ if(dom.nextScanBtn) dom.nextScanBtn.style.display = show ? 'block' : 'none'; }
 
 // State machine
-  function setState(newState) {
-    state = newState;
-    renderState();
-  }
-  function renderState() {
-    if (!dom.btnScan || !dom.video || !dom.resultContainer) return;
-    switch (state) {
-      case States.idle:
-        dom.btnScan.style.display = 'block';
-        dom.video.style.display = 'none';
-        dom.resultContainer.style.display = 'none';
-        setStatus('');
-        break;
-      case States.camera:
-        dom.btnScan.style.display = 'none';
-        dom.video.style.display = 'block';
-        dom.resultContainer.style.display = 'none';
-        setStatus('Click on video or press [V] to capture');
-        break;
-      case States.processing:
-        dom.video.style.display = 'none';
-        dom.resultContainer.style.display = 'none';
-        setStatus('Processing...');
-        break;
-      case States.results:
-        dom.video.style.display = 'none';
-        dom.resultContainer.style.display = 'block';
-        setStatus('Results below. Press [R] or Esc to start over.');
-        break;
+function setState(newState) { state = newState; renderState(); }
+function renderState() {
+    if(!dom.btnScan || !dom.video || !dom.resultContainer) return;
+    switch(state){
+      case States.idle:     dom.btnScan.style.display='block'; dom.video.style.display='none'; dom.resultContainer.style.display='none'; setStatus(''); break;
+      case States.camera:   dom.btnScan.style.display='none'; dom.video.style.display='block'; dom.resultContainer.style.display='none'; setStatus('Tap video to capture'); break;
+      case States.processing: dom.btnScan.style.display='none'; dom.video.style.display='none'; dom.resultContainer.style.display='none'; setStatus('Processing...'); break;
+      case States.results: dom.btnScan.style.display='none'; dom.video.style.display='none'; dom.resultContainer.style.display='block'; setStatus('Results'); break;
     }
-  }
+}
 
 // Camera
-  async function startCamera() {
+async function startCamera(){
     if (stream) return true;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }});
-      track = stream.getVideoTracks()[0];
-      const caps = track.getCapabilities();
-      if (caps.zoom) {
-        zoomLevel = caps.zoom.min;
-      }
-      imageCapture = new ImageCapture(track);
-      dom.video.srcObject = stream;
-      await dom.video.play();
-      return true;
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        track = stream.getVideoTracks()[0];
+        const caps = track.getCapabilities();
+        if (caps.zoom) { zoomLevel = caps.zoom.min; }
+        imageCapture = new ImageCapture(track);
+        dom.video.srcObject = stream;
+        await dom.video.play();
+        return true;
     } catch (err) {
-      console.error('Camera error:', err);
-      setStatus('Camera access denied or unavailable.');
-      return false;
+        console.error('Camera error:', err);
+        setStatus('Camera access denied or unavailable.');
+        return false;
     }
-  }
-  function stopCamera() {
-    if (!stream) return;
-    stream.getTracks().forEach(t => t.stop());
+}
+function stopCamera(){ 
+    if(!stream) return; 
+    stream.getTracks().forEach(t=>t.stop()); 
     if (dom.video) dom.video.srcObject = null;
-    stream = null;
-    track = null;
-    imageCapture = null;
-  }
-
-// Zoom
-  function applyZoom(delta) {
+    stream = null; 
+    track = null; 
+    imageCapture = null; 
+}
+function applyZoom(delta){ 
     if (!track || !imageCapture) return;
-    const caps = track.getCapabilities();
+    const caps = track.getCapabilities(); 
     if (!caps.zoom) return;
     zoomLevel = Math.max(caps.zoom.min, Math.min(caps.zoom.max, zoomLevel + delta));
     track.applyConstraints({ advanced: [{ zoom: zoomLevel }] });
-  }
+}
 
 // OCR
-  async function runOCR(blob) {
+async function runOCR(blob){
     if (!window.Tesseract) throw new Error('Tesseract not loaded');
-    const { data: { text }} = await window.Tesseract.recognize(blob, 'deu+eng', {
-      logger: m => console.log(m)
-    });
+    const { data: { text } } = await window.Tesseract.recognize(blob, 'deu+eng', { logger: m => console.log(m) });
     return text.trim();
-  }
+}
 
 // AI
-  async function sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText) {
+async function sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText) {
     if (!window.PluginMessageHandler || !window.PluginMessageHandler.postMessage) {
-      throw new Error('Rabbit PluginMessageHandler not available');
+        throw new Error('Rabbit PluginMessageHandler not available');
     }
     window.PluginMessageHandler.postMessage(JSON.stringify({
-      useLLM: true,
-      message: prompt,
-      imageDataUrl: dataUrl,
-      ocrText: ocrText
+        useLLM: true,
+        message: prompt,
+        imageDataUrl: dataUrl,
+        ocrText: ocrText
     }));
     console.log('Sent to LLM with embedded image & OCR text');
-  }
+}
 
 // Email (via PluginMessageHandler)
-  async function sendEmailViaHandler(subject, body) {
+async function sendEmailViaHandler(subject, body) {
     if (!window.PluginMessageHandler || !window.PluginMessageHandler.postMessage) {
-      throw new Error('Rabbit PluginMessageHandler not available');
+        throw new Error('Rabbit PluginMessageHandler not available');
     }
     window.PluginMessageHandler.postMessage(JSON.stringify({
-      sendEmail: true,
-      subject: subject,
-      body: body
+        sendEmail: true,
+        subject: subject,
+        body: body
     }));
     console.log('Email request sent via PluginMessageHandler');
-  }
+}
 
 // Main processing
-  async function captureAndProcess() {
-    if (state !== States.camera || !imageCapture) return;
-    setState(States.processing);
-    stopCamera();
-    showThinking(true);
-    try {
-      const blob = await imageCapture.takePhoto();
-      currentBlob = blob;
-      const url = URL.createObjectURL(blob);
-      if (dom.previewImg) dom.previewImg.src = url;
+async function captureAndProcess() {
+  if (state !== States.camera || !imageCapture) return;
+  setState(States.processing);
+  stopCamera();
+  showThinking(true);
+  try {
 
-      const ocrText = await runOCR(blob);
-      if (dom.ocrText) dom.ocrText.textContent = ocrText || '(no text found)';
+    const blob = await imageCapture.takePhoto();
+    currentBlob = blob;
+    const url = URL.createObjectURL(blob);
+    if (dom.previewImg) dom.previewImg.src = url;
+    // Tesseract OCR starten
+    const ocrText = await runOCR(blob);
+    if (dom.ocrText) dom.ocrText.textContent = ocrText || '(no text found)';
 
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const dataUrl = reader.result;
-        const prompt = "This is a receipt image. Extract: merchant, date, items, total. Return as JSON.";
-        await sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText);
-
-        if (dom.llmInterpretation) {
-          dom.llmInterpretation.textContent = 'Sent to LLM. Check Rabbit hub for response.';
-        }
-      };
-      reader.readAsDataURL(blob);
-
-      showThinking(false);
-      showNextScan(true);
-      setState(States.results);
-    } catch (err) {
-      console.error('Processing error:', err);
-      setStatus('Error: ' + err.message);
-      showThinking(false);
-      setState(States.idle);
-    }
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const dataUrl = reader.result;
+      const prompt = "Analyse the photo you just took and extract all the data from it. Then send it to me by email (neatly formatted). ";
+      await sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText);
+      if (dom.llmInterpretation) {
+        dom.llmInterpretation.textContent = 'Sent to LLM. Check Rabbit hub for response.';
+      }
+    };
+    reader.readAsDataURL(blob);
+    showThinking(false);
+    showNextScan(true);
+    setState(States.results);
+  } catch (err) {
+    console.error('Processing error:', err);
+    setStatus('Error: ' + err.message);
+    showThinking(false);
+    setState(States.idle);
   }
+}
 
 // User actions
-  async function onScan() {
+async function onScan() {
     if (state !== States.idle) return;
     const ok = await startCamera();
     if (ok) setState(States.camera);
-  }
-  function onReset() {
+}
+function onReset(){
     stopCamera();
     if (dom.previewImg) dom.previewImg.src = '';
     if (dom.ocrText) dom.ocrText.textContent = '';
     if (dom.llmInterpretation) dom.llmInterpretation.textContent = '';
     if (dom.emailSentMsg) dom.emailSentMsg.style.display = 'none';
     currentBlob = null;
-    // hide thinking GIF and next button on reset
     showThinking(false);
     showNextScan(false);
     setState(States.idle);
-  }
-
-// Mouse wheel zoom over video
-  function onWheel(e) {
-    if (state !== States.camera) return;
+}
+function onWheel(e){
+    if(state!==States.camera) return;
     e.preventDefault();
-    const delta = e.deltaY < 0 ? +1 : -1;
-    applyZoom(delta);
-  }
+    const d = e.deltaY<0 ? +1 : -1;
+    applyZoom(d);
+}
 
-// Hardware events: PTT capture (Rabbit R1 compatible)
-  function onKeyDown(e) {
-    // PTT triggers in camera state
-    if (state === States.camera && 
-        (e.key === 'v' || e.key === ' ' || e.key === 'Enter' ||
-         e.code === 'VolumeDown' || e.code === 'VolumeUp')) {
-      e.preventDefault();
-      captureAndProcess();
+// Hardware/keyboard
+function onKeyDown(e){
+    if(state===States.camera && (e.key==='v'||e.key===' '||e.key==='Enter'||e.code==='VolumeDown'||e.code==='VolumeUp')){
+        e.preventDefault();
+        captureAndProcess();
     }
-    // Escape resets from any state
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onReset();
+    if(e.key==='Escape'){
+        e.preventDefault();
+        onReset();
     }
-    // 'R' key for reset from results
-    if (state === States.results && e.key.toLowerCase() === 'r') {
-      e.preventDefault();
-      onReset();
+    if(state===States.results && e.key.toLowerCase()==='r'){
+        e.preventDefault();
+        onReset();
     }
-  }
+}
 
 // Bind events
-  function bindEvents() {
+function bindEvents(){
     dom.btnScan?.addEventListener('click', onScan);
     dom.nextScanBtn?.addEventListener('click', onReset);
-    
+
     // Click on video triggers capture
-    dom.video?.addEventListener('click', () => {
-      if (state === States.camera) captureAndProcess();
-    });
+    dom.video?.addEventListener('click', () => { if(state===States.camera) captureAndProcess(); });
     dom.video?.addEventListener('wheel', onWheel, { passive: false });
+
     document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) onReset();
-    });
-  }
+    document.addEventListener('visibilitychange', () => { if(document.hidden) onReset(); });
+}
 
-  function init() {
-    ensureDom();
-    bindEvents();
-    setState(States.idle);
-  }
+function init(){ ensureDom(); bindEvents(); setState(States.idle); }
+if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', init); } else { init(); }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
 })();
