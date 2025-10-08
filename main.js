@@ -1,4 +1,5 @@
 /* Rabbit Receipt Scanner - Jens Special Edition */
+
 // Initialize Tesseract
 const { createWorker } = Tesseract;
 let worker = null;
@@ -42,6 +43,7 @@ async function startCamera() {
             video: { facingMode: 'environment' } 
         });
         video.srcObject = stream;
+        video.style.display = 'block';
         video.classList.add('active');
         captureButton.classList.add('active');
         scanButton.style.display = 'none';
@@ -60,6 +62,7 @@ function stopCamera() {
         stream = null;
     }
     video.srcObject = null;
+    video.style.display = 'none';
     video.classList.remove('active');
     captureButton.classList.remove('active');
 }
@@ -70,7 +73,6 @@ async function captureAndScan() {
         setOverlay('OCR nicht bereit');
         return;
     }
-
     try {
         // Capture image from video
         const context = canvas.getContext('2d');
@@ -90,7 +92,7 @@ async function captureAndScan() {
         
         // Display result
         overlay.innerHTML = '';
-        result.innerHTML = `<strong>OCR Ergebnis:</strong><br><br>${text.replace(/\n/g, '<br>')}`;
+        result.innerHTML = `OCR Ergebnis:<br/>${text.replace(/\n/g, '<br/>')}`;
         result.style.display = 'block';
         
         // Show scan button again
