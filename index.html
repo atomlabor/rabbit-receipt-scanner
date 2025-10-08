@@ -8,8 +8,7 @@
     body { background:#000; color:#fff; margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
     .header { background:#222; color:#ffa500; height:32px; line-height:32px; text-align:center; font-weight:600; font-size:13px; }
     .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
-    
-    /* Scan Button & Camera Container (same position) */
+
     #buttonCameraContainer {
       width:calc(100% - 24px);
       max-width:216px;
@@ -17,7 +16,7 @@
       margin:16px auto 10px;
       position:relative;
     }
-    
+
     #scanBtn {
       width:100%;
       height:100%;
@@ -39,15 +38,12 @@
     }
     #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255,107,0,0.4); }
     #scanBtn.hidden { display:none; }
-    
-    /* Camera icon image */
+
     #scanBtn img {
       width:64px;
       height:64px;
       object-fit:contain;
     }
-    
-    /* Camera Preview Container - OPTIMIZED FOR FULL VISIBILITY */
     #cameraContainer {
       display:none;
       position:absolute;
@@ -60,21 +56,17 @@
       overflow:hidden;
       cursor:pointer;
       box-shadow:0 2px 8px rgba(0,255,100,0.3);
-      /* FLEX CENTERING FOR VIDEO */
       flex-direction:column;
       align-items:center;
       justify-content:center;
     }
     #cameraContainer.active { display:flex; }
-    
-    /* Video Element - CONTAIN TO FIT FULLY IN FRAME */
     #videoPreview {
       width:100%;
       height:100%;
       object-fit:contain;
       display:block;
     }
-    
     #cameraHint {
       position:absolute;
       bottom:10px;
@@ -86,13 +78,46 @@
       background:rgba(0,0,0,0.6);
       padding:4px;
     }
-    
     #statusInfo { margin-top:10px; font-size:12px; text-align:center; min-height:18px; color:#ffa500; }
+    #previewImg {
+      display:none;
+      max-width:240px; max-height:282px;
+      object-fit:contain; background:#000;
+      margin-top:12px; border-radius:8px;
+      box-shadow:0 2px 8px rgba(0,255,200,0.08);
+    }
+    #results {
+      margin:14px 0 4px;
+      font-size:13px;
+      line-height:1.4;
+      word-break:break-word;
+      width:100%;
+      max-width:220px;
+    }
+    #processing {
+      display:none;
+      margin-top:24px;
+      font-size:15px;
+      color:#8cf9a0;
+    }
+    #retryBtn {
+      display:none;
+      background:#393;
+      color:#fff;
+      border:none;
+      border-radius:5px;
+      padding:7px 15px;
+      font-size:13px;
+      font-weight:600;
+      margin-top:12px;
+      box-shadow:0 2px 8px rgba(50,255,150,0.13);
+      cursor:pointer;
+    }
+    #retryBtn:hover { background:#4edc6c; }
   </style>
 </head>
 <body>
   <div class="header">🥕 rabbit receipt scanner</div>
-  
   <div class="content">
     <div id="buttonCameraContainer">
       <button id="scanBtn">
@@ -104,11 +129,14 @@
         <div id="cameraHint">drücken zum scannen</div>
       </div>
     </div>
-    
+    <canvas id="canvas" style="display:none"></canvas>
+    <img id="previewImg" style="display:none;" />
+    <div id="results"></div>
+    <div id="processing"><span id="processText"></span></div>
+    <button id="retryBtn">Nochmal scannen</button>
     <div id="statusInfo"></div>
   </div>
-  
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="main.js" type="module"></script>
+  <script src="main.js"></script>
 </body>
 </html>
