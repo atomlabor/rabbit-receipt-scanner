@@ -1,5 +1,3 @@
-import { deviceControls } from 'r1-create';
-
 /* Rabbit Receipt Scanner
 Key fixes:
 - Scan button completely replaced by video preview when camera starts
@@ -14,7 +12,6 @@ Key fixes:
 */
 (function() {
 'use strict';
-
 // App State
 const States = Object.freeze({
     idle: 'idle',
@@ -23,18 +20,15 @@ const States = Object.freeze({
     results: 'results'
 });
 let state = States.idle;
-
 // Media and processing
 let stream = null;
 let currentBlob = null;
 let zoomLevel = 0;
 let track = null;
 let imageCapture = null;
-
 // DOM (must exist in HTML)
 const dom = {};
 const qs = (id) => document.getElementById(id);
-
 function cacheDom() {
     dom.btnScan = qs('scanBtn');
     dom.status = qs('status');
@@ -48,15 +42,12 @@ function cacheDom() {
     dom.thinkingGif = qs('thinkingGif');
     dom.previewImg = qs('previewImg');
 }
-
 function ensureDom(){ if(Object.keys(dom).length===0) cacheDom(); }
 function setStatus(txt) { if (dom.status) dom.status.textContent = txt; }
 function showThinking(show){ if(dom.thinkingGif) dom.thinkingGif.style.display = show ? 'block' : 'none'; }
 function showNextScan(show){ if(dom.nextScanBtn) dom.nextScanBtn.style.display = show ? 'block' : 'none'; }
-
 // State machine
 function setState(newState) { state = newState; renderState(); }
-
 function renderState() {
     if(!dom.btnScan || !dom.video || !dom.resultContainer) return;
     switch(state){
@@ -66,7 +57,6 @@ function renderState() {
       case States.results: dom.btnScan.style.display='none'; dom.video.style.display='none'; dom.resultContainer.style.display='block'; setStatus('Results'); break;
     }
 }
-
 // Camera
 async function startCamera(){
     if (stream) return true;
@@ -85,7 +75,6 @@ async function startCamera(){
         return false;
     }
 }
-
 function stopCamera(){ 
     if(!stream) return; 
     stream.getTracks().forEach(t=>t.stop()); 
@@ -94,7 +83,6 @@ function stopCamera(){
     track = null; 
     imageCapture = null; 
 }
-
 function applyZoom(delta){ 
     if (!track || !imageCapture) return;
     const caps = track.getCapabilities(); 
@@ -102,14 +90,12 @@ function applyZoom(delta){
     zoomLevel = Math.max(caps.zoom.min, Math.min(caps.zoom.max, zoomLevel + delta));
     track.applyConstraints({ advanced: [{ zoom: zoomLevel }] });
 }
-
 // OCR
 async function runOCR(blob){
     if (!window.Tesseract) throw new Error('Tesseract not loaded');
     const { data: { text } } = await window.Tesseract.recognize(blob, 'deu+eng', { logger: m => console.log(m) });
     return text.trim();
 }
-
 // AI
 async function sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText) {
     if (!window.PluginMessageHandler || !window.PluginMessageHandler.postMessage) {
@@ -123,7 +109,6 @@ async function sendToAIWithEmbeddedDataUrl(prompt, dataUrl, ocrText) {
     }));
     console.log('Sent to LLM with embedded image & OCR text');
 }
-
 // Email (via PluginMessageHandler)
 async function sendEmailViaHandler(subject, body) {
     if (!window.PluginMessageHandler || !window.PluginMessageHandler.postMessage) {
@@ -136,7 +121,6 @@ async function sendEmailViaHandler(subject, body) {
     }));
     console.log('Email request sent via PluginMessageHandler');
 }
-
 // Photo capture: use hardware API if available, otherwise fallback to ImageCapture
 async function takePhoto() {
     // Try hardware camera API first
@@ -151,7 +135,6 @@ async function takePhoto() {
     }
     throw new Error('No camera capture method available');
 }
-
 // Main processing
 async function captureAndProcess() {
   if (state !== States.camera) return;
@@ -190,14 +173,12 @@ async function captureAndProcess() {
     setState(States.idle);
   }
 }
-
 // User actions
 async function onScan() {
     if (state !== States.idle) return;
     const ok = await startCamera();
     if (ok) setState(States.camera);
 }
-
 function onReset(){
     stopCamera();
     if (dom.previewImg) dom.previewImg.src = '';
@@ -209,14 +190,12 @@ function onReset(){
     showNextScan(false);
     setState(States.idle);
 }
-
 function onWheel(e){
     if(state!==States.camera) return;
     e.preventDefault();
     const d = e.deltaY<0 ? +1 : -1;
     applyZoom(d);
 }
-
 // Hardware/keyboard
 function onKeyDown(e){
     if(state===States.camera && (e.key==='v'||e.key===' '||e.key==='Enter'||e.code==='VolumeDown'||e.code==='VolumeUp')){
@@ -232,43 +211,6 @@ function onKeyDown(e){
         onReset();
     }
 }
-
-// Device controls setup with full feature set
-function setupDeviceControls() {
-    try {
-        // Initialize with options
-        deviceControls.init({
-            sideButtonEnabled: true,
-            scrollWheelEnabled: true,
-            keyboardFallback: true
-        });
-        
-        // Register event handlers
-        deviceControls.on('sideButton', (event) => {
-            console.log('Side button pressed');
-            // Optional: trigger capture if in camera state
-            // if (state === States.camera) captureAndProcess();
-        });
-        
-        deviceControls.on('scrollWheel', (data) => {
-            console.log('Scrolled', data.direction); // 'up' oder 'down'
-            // Optional: use for zoom control
-            if (state === States.camera) {
-                const delta = data.direction === 'up' ? +1 : -1;
-                applyZoom(delta);
-            }
-        });
-        
-        // Set control states as examples
-        deviceControls.setSideButtonEnabled(false);
-        deviceControls.setScrollWheelEnabled(true);
-        
-        console.log('deviceControls initialized successfully with full feature set');
-    } catch (err) {
-        console.warn('deviceControls init failed:', err);
-    }
-}
-
 // Bind events
 function bindEvents(){
     dom.btnScan?.addEventListener('click', onScan);
@@ -279,14 +221,26 @@ function bindEvents(){
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('visibilitychange', () => { if(document.hidden) onReset(); });
 }
-
 function init(){ 
     ensureDom(); 
-    bindEvents(); 
-    setupDeviceControls();
-    setState(States.idle); 
+    bindEvents();
+    setState(States.idle);
+    
+    // Initialize deviceControls if available
+    if (window.deviceControls) {
+      deviceControls.init({
+        sideButtonEnabled: true,
+        scrollWheelEnabled: true,
+        keyboardFallback: true
+      });
+      deviceControls.on('sideButton', () => {
+        if(state === States.camera) captureAndProcess();
+      });
+      deviceControls.on('scrollWheel', (data) => {
+        // Optional: Nutzen für spätere Features
+        console.log('Scrolled', data.direction);
+      });
+    }
 }
-
 if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', init); } else { init(); }
-
 })();
