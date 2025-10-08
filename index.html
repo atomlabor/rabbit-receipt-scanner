@@ -127,6 +127,17 @@
       display: none;
       white-space: pre-wrap;
     }
+    #ocrProcessing {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.8);
+      object-fit: contain;
+    }
     .error { color: #ff4444; background: rgba(255,68,68,0.1); }
     .success { color: #00ff88; background: rgba(0,255,136,0.1); }
     .processing { color: #ffa500; background: rgba(255,165,0,0.1); }
@@ -135,20 +146,21 @@
 </head>
 <body>
   <div class="header">
-    <img src="data:image/svg+xml,%3Csvg width='36' height='36' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffa500'/%3E%3Cpath d='M35 45c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5zm20 0c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5z' fill='%23000'/%3E%3Cpath d='M30 30c5-8 15-8 20 0m20 0c5-8 15-8 20 0M35 65c5 8 25 8 30 0' stroke='%23000' stroke-width='3' fill='none'/%3E%3C/svg%3E" alt="Rabbit Camera Logo" width="36" height="36">
+    <img src="r1-cam.png" alt="Rabbit Camera Logo" width="36" height="36">
     RABBIT RECEIPT SCANNER
   </div>
   <div class="content">
     <canvas id="captureCanvas"></canvas>
     <div id="buttonCameraContainer">
-      <video id="videoPreview" autoplay muted playsinline></video>
+      <video id="videoPreview" autoplay playsinline muted></video>
       <div id="videoHint">Zum Scannen ins Kamerabild tippen</div>
-      <img id="previewImg" alt="Captured Receipt">
-      <img id="rabbitLogo" src="data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ffa500'/%3E%3Cpath d='M35 45c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5zm20 0c0-3 2-5 5-5s5 2 5 5-2 5-5 5-5-2-5-5z' fill='%23000'/%3E%3Cpath d='M30 30c5-8 15-8 20 0m20 0c5-8 15-8 20 0M35 65c5 8 25 8 30 0' stroke='%23000' stroke-width='3' fill='none'/%3E%3C/svg%3E" alt="Rabbit Logo">
+      <img id="previewImg" alt="Captured Receipt" />
+      <img id="rabbitLogo" src="r1-cam.png" alt="Rabbit Logo" />
     </div>
     <div id="results"></div>
     <div id="statusText">Kamera wird gestartet...</div>
   </div>
+  <img src="rabbit-thinking.gif" id="ocrProcessing" alt="OCR Processing" />
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="main.js"></script>
 </body>
