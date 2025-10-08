@@ -1,6 +1,5 @@
 /* Rabbit Receipt Scanner - Jens Special Edition */
 (function() {
-
 // === GLOBALS ===
 let currentState = 'camera';
 let stream = null;
@@ -43,229 +42,156 @@ window.storage = {
             console.warn('[STORAGE] Get failed:', e);
             return null;
         }
-    },
+    }
 };
 
-// === HELPERS ===
-function setStatus(message, type = '') {
-    if (!dom.status) return;
-    dom.status.textContent = message;
-    dom.status.className = type;
-    console.log(`[STATUS] ${message} (${type})`);
+function setStatus(msg) {
+    if (dom.status) dom.status.textContent = msg;
+    console.log('[STATUS]', msg);
 }
 
-function setResultText(text) {
-    if (!dom.results) return;
-    dom.results.textContent = text;
-    dom.results.style.display = text ? 'block' : 'none';
+function showState(state) {
+    currentState = state;
+    document.body.className = 'state-' + state;
+    console.log('[STATE]', state);
 }
 
-function cacheDom() {
-    dom.video = document.getElementById('videoPreview');
-    dom.canvas = document.getElementById('captureCanvas');
-    dom.previewImg = document.getElementById('previewImg');
-    dom.status = document.getElementById('statusText');
-    dom.results = document.getElementById('results');
-    dom.rabbitLogo = document.getElementById('rabbitLogo');
-    dom.videoHint = document.getElementById('videoHint');
-    dom.ocrProcessing = document.getElementById('ocrProcessing');
+function setOCRText(text) {
+    if (dom.ocrText) {
+        dom.ocrText.value = text || '';
+    }
 }
 
-// === CAMERA ===
-function startCamera() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus('Camera not supported', 'error');
+// === UTILITY: Send to AI with embedded data URL ===
+function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl, ocrText) {
+    const escapedOcrText = (ocrText || 'No OCR text available').replace(/"/g, '\\"');
+    const prompt = `You are an assistant. Please email the attached image (a scanned receipt) to the recipient. Add the OCR text as body content. Return ONLY valid JSON in this exact format: {"action":"email","to":"${toEmail}","subject":"Scanned Receipt","body":"${escapedOcrText}","attachments":[{"dataUrl":"<dataurl>"}]}`;
+    const payload = {
+        useLLM: true,
+        message: prompt,
+        imageDataUrl: dataUrl // included explicitly for server/tooling, no link
+    };
+    if (typeof PluginMessageHandler !== 'undefined') {
+        PluginMessageHandler.postMessage(JSON.stringify(payload));
+        setStatus('Sent to AI for email...');
+    } else {
+        setStatus('Plugin API not available');
+        console.log('Payload:', payload);
+    }
+}
+
+async function startCamera() {
+    try {
+        setStatus('Starting camera...');
+        const constraints = {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        dom.video.srcObject = stream;
+        showState('camera');
+        setStatus('Camera ready');
+    } catch (err) {
+        setStatus('Camera error: ' + err.message);
+        console.error('[CAMERA]', err);
+    }
+}
+
+function captureSnapshot() {
+    if (!stream) {
+        setStatus('No camera stream');
         return;
     }
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 }, audio: false })
-        .then(mediaStream => {
-            stream = mediaStream;
-            dom.video.srcObject = mediaStream;
-            dom.video.style.display = 'block';
-            dom.previewImg.style.display = 'none';
-            dom.rabbitLogo.style.display = 'none';
-            setStatus('Bereit zum Scannen', 'success');
-            setTimeout(() => {
-                if (dom.videoHint) dom.videoHint.style.display = 'block';
-            }, 500);
-        })
-        .catch(err => {
-            setStatus('Kamera-Fehler', 'error');
-            console.error('[CAMERA]', err);
-        });
+    setStatus('Capturing snapshot...');
+    const canvas = document.createElement('canvas');
+    canvas.width = dom.video.videoWidth;
+    canvas.height = dom.video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(dom.video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/png');
+    dom.preview.src = dataUrl;
+    capturedImageData = dataUrl;
+    showState('preview');
+    setStatus('Snapshot captured. Tap OCR to extract text.');
 }
 
-function stopCamera() {
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-        dom.video.style.display = 'none';
-    }
+function retakePhoto() {
+    showState('camera');
+    setStatus('Ready to capture');
 }
 
-// === CAPTURE & OCR ===
-function capture() {
-    if (!stream) return;
-    
-    dom.videoHint.style.display = 'none';
-    const ctx = dom.canvas.getContext('2d');
-    dom.canvas.width = dom.video.videoWidth;
-    dom.canvas.height = dom.video.videoHeight;
-    ctx.drawImage(dom.video, 0, 0);
-    
-    const dataUrl = dom.canvas.toDataURL('image/jpeg', 0.9);
-    capturedImageData = dataUrl; // Store for LLM
-    dom.previewImg.src = dataUrl;
-    dom.previewImg.style.display = 'block';
-    dom.rabbitLogo.style.display = 'block';
-    stopCamera();
-    currentState = 'captured';
-    setStatus('Foto aufgenommen', 'success');
-    
-    // Auto-start OCR
-    setTimeout(() => runOCR(dataUrl), 300);
-}
-
-function runOCR(dataUrl) {
-    if (!window.Tesseract) {
-        setStatus('OCR noch nicht geladen', 'error');
+function performOCR() {
+    if (!capturedImageData) {
+        setStatus('No image captured');
         return;
     }
-    
-    // Show the thinking overlay
-    if (dom.ocrProcessing) {
-        dom.ocrProcessing.style.display = 'block';
+    setStatus('Performing OCR...');
+    // Use Tesseract.js or similar library
+    if (typeof Tesseract === 'undefined') {
+        setStatus('OCR library not loaded');
+        setOCRText('OCR library (Tesseract.js) not available.');
+        return;
     }
-    
-    setStatus('Erkenne Text...', 'processing');
-    setResultText('');
-    
-    window.Tesseract.recognize(dataUrl, 'deu', {
-        logger: info => {
-            if (info.status === 'recognizing text') {
-                const percent = Math.round(info.progress * 100);
-                setStatus(`OCR läuft: ${percent}%`, 'processing');
+    Tesseract.recognize(
+        capturedImageData,
+        'eng',
+        {
+            logger: m => {
+                if (m.status === 'recognizing text') {
+                    setStatus(`OCR: ${Math.round(m.progress * 100)}%`);
+                }
             }
         }
-    })
-    .then(({ data }) => {
-        const text = data.text.trim();
-        console.log('[OCR] Result:', text);
-        
-        if (text.length > 0) {
-            setStatus('Text erkannt!', 'success');
-            setResultText(text);
-            
-            // Trigger LLM email after OCR success
-            setTimeout(() => {
-                sendViaRabbitLLM(capturedImageData, text);
-            }, 1000);
-        } else {
-            setStatus('Kein Text erkannt', 'error');
-            // Hide the thinking overlay on error
-            if (dom.ocrProcessing) {
-                dom.ocrProcessing.style.display = 'none';
-            }
-        }
-    })
-    .catch(err => {
-        console.error('[OCR] Error:', err);
-        setStatus('OCR-Fehler', 'error');
-        // Hide the thinking overlay on error
-        if (dom.ocrProcessing) {
-            dom.ocrProcessing.style.display = 'none';
-        }
+    ).then(({ data: { text } }) => {
+        setStatus('OCR complete');
+        setOCRText(text);
+    }).catch(err => {
+        setStatus('OCR error: ' + err.message);
+        console.error('[OCR]', err);
     });
 }
 
-// === RABBIT LLM EMAIL ===
-function sendViaRabbitLLM(imageDataUrl, ocrText) {
-    console.log('[RABBIT_LLM] Preparing to send to Rabbit LLM...');
-    
-    if (!window.PluginMessageHandler) {
-        console.error('[RABBIT_LLM] PluginMessageHandler not available');
-        setStatus('Rabbit LLM nicht verfügbar', 'error');
-        // Hide the thinking overlay
-        if (dom.ocrProcessing) {
-            dom.ocrProcessing.style.display = 'none';
-        }
+function sendViaEmail() {
+    const emailInput = dom.emailInput;
+    const toEmail = (emailInput && emailInput.value || '').trim();
+    if (!toEmail) {
+        setStatus('Enter a valid email address');
         return;
     }
-    
-    try {
-        // Construct a prompt for the LLM
-        const prompt = `Bitte sende diese Quittung per E-Mail an den Empfänger. Hier ist der erkannte Text: ${ocrText}`;
-        
-        // Create payload with prompt, image, and OCR text
-        const payload = {
-            action: 'llm_email',
-            prompt: prompt,
-            image: imageDataUrl,
-            ocrText: ocrText,
-            timestamp: new Date().toISOString()
-        };
-        
-        // Send to Rabbit LLM via PluginMessageHandler
-        window.PluginMessageHandler.postMessage(JSON.stringify(payload));
-        
-        console.log('[RABBIT_LLM] Message sent to Rabbit LLM for email processing');
-        setStatus('Sending via Rabbit LLM email...', 'processing');
-        
-        // Update status after a delay (assuming async processing)
-        setTimeout(() => {
-            setStatus('Email sent via Rabbit LLM!', 'success');
-            // Hide the thinking overlay after email is sent
-            if (dom.ocrProcessing) {
-                dom.ocrProcessing.style.display = 'none';
-            }
-        }, 2000);
-        
-    } catch (error) {
-        console.error('[RABBIT_LLM] Error sending to Rabbit LLM:', error);
-        setStatus('Failed to send via Rabbit LLM', 'error');
-        // Hide the thinking overlay on error
-        if (dom.ocrProcessing) {
-            dom.ocrProcessing.style.display = 'none';
-        }
+    if (!capturedImageData) {
+        setStatus('No image captured');
+        return;
     }
+    const ocrText = dom.ocrText ? dom.ocrText.value : 'No OCR text available';
+    setStatus('Preparing email...');
+    sendToAIWithEmbeddedDataUrl(toEmail, capturedImageData, ocrText);
 }
 
-// === INITIALIZATION ===
 function init() {
-    console.log('[INIT] Initializing Rabbit Receipt Scanner...');
-    cacheDom();
-    setupEventListeners();
-    
-    // Load Tesseract.js
-    if (!window.Tesseract && typeof importScripts !== 'function') {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/tesseract.js@v4/dist/tesseract.min.js';
-        script.onload = () => {
-            console.log('[INIT] Tesseract.js loaded');
-            setStatus('OCR ready', 'success');
-        };
-        document.head.appendChild(script);
-    }
-    
-    // Start camera automatically
-    reset();
-}
-
-function setupEventListeners() {
-    dom.video.addEventListener('click', capture);
-}
-
-function reset() {
-    currentState = 'camera';
+    dom = {
+        video: document.getElementById('video'),
+        preview: document.getElementById('preview'),
+        captureBtn: document.getElementById('captureBtn'),
+        retakeBtn: document.getElementById('retakeBtn'),
+        ocrBtn: document.getElementById('ocrBtn'),
+        sendBtn: document.getElementById('sendBtn'),
+        ocrText: document.getElementById('ocrText'),
+        status: document.getElementById('status'),
+        emailInput: document.getElementById('emailInput')
+    };
+    if (dom.captureBtn) dom.captureBtn.addEventListener('click', captureSnapshot);
+    if (dom.retakeBtn) dom.retakeBtn.addEventListener('click', retakePhoto);
+    if (dom.ocrBtn) dom.ocrBtn.addEventListener('click', performOCR);
+    if (dom.sendBtn) dom.sendBtn.addEventListener('click', sendViaEmail);
     startCamera();
 }
 
-// Start when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
     init();
 }
-
 })();
