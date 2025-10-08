@@ -177,7 +177,6 @@
       updateStatus('OCR complete - Sending to AI...');
       await sendToAIWithEmbeddedDataUrl(dataUrl, text);
       setState(States.results); // will hide GIF and show Next Scan
-      updateStatus('Done! Press R to scan again.');
     } catch (err) {
       console.error('OCR error:', err);
       updateStatus('OCR failed: ' + err.message);
@@ -187,7 +186,7 @@
   // Modified function to send email action with embedded dataUrl via LLM only
   async function sendToAIWithEmbeddedDataUrl(dataUrl, ocrText) {
     // Construct the prompt for the LLM
-    const prompt = `Summarise all the important information from this image and send me all the data, including the OCR content and the image, by email. Return also with valid JSON in this exact format: {"action":"email","subject":"Receipt Scan","body":"Here is your scanned receipt data...","attachments":[{"dataUrl":"<dataurl>"}]}`;
+    const prompt = `Summarise all the important information from this image and send me all the data, including the OCR content and the image, by email. Return also with valid JSON in this exact format: {"action":"email","subject":"Receipt Scan","body":"Here is your scanned receipt data...","attachments":[{"dataUrl":"<dataUrl>"}]}`;
     
     // Construct the complete payload with embedded dataUrl
     const payload = {
