@@ -6,7 +6,7 @@
    - Clean state transitions: idle ↔ camera → processing → results → idle
    - Rabbit R1 hardware events: PTT (volume keys, 'v', space, enter), Escape for reset
    - Tesseract OCR with deu+eng
-   - Rabbit LLM mail integration with explicit prompt and image attachment
+   - Rabbit PluginMessageHandler integration with embedded dataUrl
 */
 (function() {
   'use strict';
@@ -178,8 +178,8 @@
         dom.resultsText.textContent = ocrText || '(Kein Text erkannt)';
       }
       setState(States.results);
-      // Try to send via Rabbit LLM with image
-      await sendToRabbitMail(ocrText, currentBlob);
+      // Try to send via Rabbit PluginMessageHandler with embedded dataUrl
+      await sendToAIWithEmbeddedDataUrl(ocrText, currentBlob);
     } catch (err) {
       console.error('Processing error:', err);
       setStatus('Fehler bei der Verarbeitung: ' + err.message);
@@ -188,44 +188,54 @@
       setTimeout(() => setState(States.idle), 3000);
     }
   }
-  async function sendToRabbitMail(ocrText, imageBlob) {
+  // Send to AI with embedded dataUrl (Rabbit PluginMessageHandler integration)
+  async function sendToAIWithEmbeddedDataUrl(ocrText, imageBlob) {
     if (!imageBlob) return;
     try {
-      setStatus('Sende an Rabbit Mail...');
+      setStatus('Sende an Rabbit AI...');
       
-      // Convert blob to base64 for API transmission
-      const base64Image = await new Promise((resolve) => {
+      // Convert blob to base64 data URL
+      const dataUrl = await new Promise((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result);
         reader.readAsDataURL(imageBlob);
       });
       
-      // Rabbit LLM endpoint with explicit prompt and image attachment
-      const response = await fetch('/api/rabbit-llm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: 'Summarise all the important information from this image and then send me all the data and the image by email.',
-          image: base64Image,
-          ocrText: ocrText
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (dom.summaryText && data.summary) {
-          dom.summaryText.textContent = 'LLM Zusammenfassung: ' + data.summary;
-        }
-        setStatus('Erfolgreich an Rabbit Mail gesendet!');
-      } else {
-        console.warn('Rabbit LLM not available');
+      // Prompt that instructs LLM to extract info and send email with dynamic recipient
+      const prompt = 'Summarise all the important information from this image and then send me all the data by email. Return ONLY valid JSON in this exact format: {"action":"email","to":"<email>","subject":"Receipt Scan","body":"<summary>","dataUrl":"<attached_image>"}';
+      
+      // Check if PluginMessageHandler is available (Rabbit R1 device)
+      if (typeof PluginMessageHandler !== 'undefined' && PluginMessageHandler.sendMessage) {
+        // Rabbit device: Use PluginMessageHandler with payload containing prompt and dataUrl
+        const payload = {
+          prompt: prompt,
+          dataUrl: dataUrl,
+          ocrText: ocrText || '' // Optional fallback body content
+        };
+        
+        console.log('Sending to PluginMessageHandler:', payload);
+        PluginMessageHandler.sendMessage(JSON.stringify(payload));
+        
         if (dom.summaryText) {
-          dom.summaryText.textContent = '(LLM nicht verfügbar)';
+          dom.summaryText.textContent = 'Gesendet an Rabbit AI (via PluginMessageHandler)';
         }
+        setStatus('Erfolgreich an Rabbit AI gesendet!');
+      } else {
+        // Browser/test fallback: Log to console
+        console.log('PluginMessageHandler not available. Fallback mode.');
+        console.log('Prompt:', prompt);
+        console.log('DataUrl length:', dataUrl.length);
+        console.log('OCR Text:', ocrText);
+        
+        if (dom.summaryText) {
+          dom.summaryText.textContent = '(Test-Modus: PluginMessageHandler nicht verfügbar)';
+        }
+        setStatus('Status: Nur Konsole (kein Rabbit-Gerät)');
       }
     } catch (err) {
-      console.warn('Rabbit mail error:', err);
+      console.warn('AI send error:', err);
       if (dom.summaryText) {
-        dom.summaryText.textContent = '(Mail-Versand fehlgeschlagen)';
+        dom.summaryText.textContent = '(Versand fehlgeschlagen)';
       }
     }
   }
