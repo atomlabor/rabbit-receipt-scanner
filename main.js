@@ -159,7 +159,7 @@
         dom.ocrText.textContent = text || '(No text detected)';
       }
       updateStatus('OCR complete - Sending to AI...');
-      await sendToAIWithEmbeddedDataUrl(text, dataUrl);
+      await sendToAIWithEmbeddedDataUrl(dataUrl, text);
       setState(States.results);
       updateStatus('Done! Press R to scan again.');
     } catch (err) {
@@ -168,27 +168,16 @@
       setState(States.results);
     }
   }
-  // Modified function to send email action with embedded dataUrl
-  async function sendToAIWithEmbeddedDataUrl(ocrText, dataUrl) {
-    // Determine email address (default or dynamic)
-    const emailAddress = 'mahnke@gmail.com'; // Default Rabbit email address
-    
+  // Modified function to send email action with embedded dataUrl via LLM only
+  async function sendToAIWithEmbeddedDataUrl(dataUrl, ocrText) {
     // Construct the prompt for the LLM
-    const prompt = `Summarise all the important information from this image and then send me all the data by email. Return ONLY valid JSON in this exact format: {"action":"email","to":"${emailAddress}","subject":"Receipt Scan","body":"All info and results...","attachments":[{"dataUrl":"<dataurl>"}]}`;
+    const prompt = `You are an assistant. Please email the attached image to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","subject":"Receipt Scan","body":"Here is my scanned receipt data...","attachments":[{"dataUrl":"<dataUrl>"}]}`;
     
     // Construct the complete payload with embedded dataUrl
     const payload = {
-      action: 'email',
-      to: emailAddress,
-      subject: 'Receipt Scan',
-      body: `OCR Results:\n\n${ocrText}\n\nPlease process this receipt and extract all important information.`,
-      attachments: [
-        {
-          dataUrl: dataUrl
-        }
-      ],
-      prompt: prompt,
-      ocrText: ocrText
+      useLLM: true,
+      message: prompt,
+      imageDataUrl: dataUrl
     };
     
     console.log('Sending to Rabbit LLM:', payload);
