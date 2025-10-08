@@ -101,17 +101,18 @@
 </head>
 <body>
   <div class="header">
-    <img src="r1-logo.png" alt="R1 Logo">
+    <img src="r1-cam.png" alt="R1 Logo">
     <span>Receipt Scanner</span>
   </div>
   <div class="content">
     <button id="scanButton">Scan starten</button>
-    <video id="video" autoplay playsinline></video>
+    <video id="video" autoplay playsinline style="max-height:260px;width:100%;object-fit:cover;display:none"></video>
     <button id="captureButton"><img src="r1-cam.png" alt="Capture"></button>
     <div class="overlay" id="overlay"></div>
     <canvas id="canvas"></canvas>
     <div id="result"></div>
   </div>
+  <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
