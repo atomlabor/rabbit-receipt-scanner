@@ -1,142 +1,123 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=240, initial-scale=1.0, viewport-fit=cover" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=240, initial-scale=1.0, viewport-fit=cover">
   <title>rabbit receipt scanner</title>
   <style>
-    body { background:#000; color:#fff; margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    .header { background:#222; color:#ffa500; height:32px; line-height:32px; text-align:center; font-weight:600; font-size:13px; }
-    .content { display:flex; flex-direction:column; align-items:center; padding:0 12px; }
-
+    body {
+      background: #000;
+      color: #fff;
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    .header {
+      background: #222;
+      color: #ffa500;
+      height: 32px;
+      line-height: 32px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 12px;
+    }
     #buttonCameraContainer {
-      width:calc(100% - 24px);
-      max-width:216px;
-      height:200px;
-      margin:16px auto 10px;
-      position:relative;
+      width: calc(100% - 24px);
+      max-width: 216px;
+      height: 200px;
+      margin: 16px auto 10px;
+      position: relative;
     }
-
     #scanBtn {
-      width:100%;
-      height:100%;
-      background:#ff6b00;
-      border:none;
-      border-radius:8px;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      gap:8px;
-      padding:12px;
-      font-size:15px;
-      font-weight:600;
-      color:#fff;
-      cursor:pointer;
-      box-shadow:0 2px 8px rgba(255,107,0,0.3);
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #ff6b00 0%, #ff8c42 100%);
+      border: none;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(255,107,0,0.3);
       transition: all 0.2s ease;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
-    #scanBtn:hover { background:#ff7a00; box-shadow:0 3px 12px rgba(255,107,0,0.4); }
-    #scanBtn.hidden { display:none; }
-
+    #scanBtn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(255,107,0,0.4);
+      background: linear-gradient(135deg, #ff7a1a 0%, #ff9952 100%);
+    }
+    #scanBtn:active {
+      transform: translateY(0px);
+      box-shadow: 0 2px 10px rgba(255,107,0,0.3);
+    }
     #scanBtn img {
-      width:64px;
-      height:64px;
-      object-fit:contain;
+      width: 64px;
+      height: 64px;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
     }
-    #cameraContainer {
-      display:none;
-      position:absolute;
-      top:0;
-      left:0;
-      width:100%;
-      height:100%;
-      background:#222;
-      border-radius:8px;
-      overflow:hidden;
-      cursor:pointer;
-      box-shadow:0 2px 8px rgba(0,255,100,0.3);
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
+    #cameraPreview {
+      width: 100%;
+      height: 100%;
+      border-radius: 12px;
+      object-fit: cover;
+      cursor: pointer;
+      display: none;
     }
-    #cameraContainer.active { display:flex; }
-    #videoPreview {
-      width:100%;
-      height:100%;
-      object-fit:contain;
-      display:block;
+    .status {
+      text-align: center;
+      font-size: 14px;
+      margin: 8px;
+      min-height: 20px;
+      font-weight: 500;
     }
-    #cameraHint {
-      position:absolute;
-      bottom:10px;
-      left:0;
-      right:0;
-      text-align:center;
-      color:#fff;
-      font-size:11px;
-      background:rgba(0,0,0,0.6);
-      padding:4px;
+    .error {
+      color: #ff4444;
     }
-    #statusInfo { margin-top:10px; font-size:12px; text-align:center; min-height:18px; color:#ffa500; }
-    #previewImg {
-      display:none;
-      max-width:240px; max-height:282px;
-      object-fit:contain; background:#000;
-      margin-top:12px; border-radius:8px;
-      box-shadow:0 2px 8px rgba(0,255,200,0.08);
+    .success {
+      color: #00ff88;
     }
-    #results {
-      margin:14px 0 4px;
-      font-size:13px;
-      line-height:1.4;
-      word-break:break-word;
-      width:100%;
-      max-width:220px;
+    .processing {
+      color: #ffa500;
     }
-    #processing {
-      display:none;
-      margin-top:24px;
-      font-size:15px;
-      color:#8cf9a0;
+    .hidden {
+      display: none !important;
     }
-    #retryBtn {
-      display:none;
-      background:#393;
-      color:#fff;
-      border:none;
-      border-radius:5px;
-      padding:7px 15px;
-      font-size:13px;
-      font-weight:600;
-      margin-top:12px;
-      box-shadow:0 2px 8px rgba(50,255,150,0.13);
-      cursor:pointer;
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
     }
-    #retryBtn:hover { background:#4edc6c; }
+    .pulsing {
+      animation: pulse 1.5s infinite;
+    }
   </style>
 </head>
 <body>
-  <div class="header">🥕 rabbit receipt scanner</div>
+  <div class="header">🐰 RABBIT RECEIPT SCANNER</div>
+  
   <div class="content">
     <div id="buttonCameraContainer">
       <button id="scanBtn">
-        <img src="r1-cam.png" alt="Scan" />
-        Scan Receipt
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23ffffff' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C13.1 2 14 2.9 14 4H20C21.1 4 22 4.9 22 6V18C22 19.1 21.1 20 20 20H4C2.9 20 2 19.1 2 18V6C2 4.9 2.9 4 4 4H10C10 2.9 10.9 2 12 2M12 7C9.24 7 7 9.24 7 12S9.24 17 12 17 17 14.76 17 12 14.76 7 12 7M12 9C13.66 9 15 10.34 15 12S13.66 15 12 15 9 13.66 9 12 10.34 9 12 9Z'/%3E%3C/svg%3E" alt="Kamera">
+        <span>BELEG SCANNEN</span>
       </button>
-      <div id="cameraContainer">
-        <video id="videoPreview" autoplay playsinline></video>
-        <div id="cameraHint">drücken zum scannen</div>
-      </div>
+      <video id="cameraPreview" autoplay muted playsinline></video>
     </div>
-    <canvas id="canvas" style="display:none"></canvas>
-    <img id="previewImg" style="display:none;" />
-    <div id="results"></div>
-    <div id="processing"><span id="processText"></span></div>
-    <button id="retryBtn">Nochmal scannen</button>
-    <div id="statusInfo"></div>
+    
+    <div id="status" class="status">Bereit zum Scannen</div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  
   <script src="main.js"></script>
 </body>
 </html>
