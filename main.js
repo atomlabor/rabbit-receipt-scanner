@@ -1,11 +1,11 @@
-/* Rabbit Receipt Scanner */
+/* Rabbit Receipt Scanner - Jens Special Edition */
 
+(function() {
 // === GLOBALS ===
 let currentState = 'camera';
 let stream = null;
 let zoom = 1.0;
 let dom = {};
-let recognition = null;
 
 // Rabbit device controls if available
 if (window.deviceControls && window.deviceControls.scrollWheel) {
@@ -50,53 +50,89 @@ function cacheDom() {
     const qs = (selector) => document.querySelector('#' + selector);
     dom.video = qs('videoPreview');
     dom.canvas = qs('captureCanvas');
-    dom.captureButton = qs('captureButton');
-    dom.output = qs('output');
-    dom.loading = qs('loading');
+    dom.scanBtn = qs('scanBtn');
+    dom.previewImg = qs('previewImg');
+    dom.rabbitLogo = qs('rabbitLogo');
+    dom.status = qs('statusText');
     dom.results = qs('results');
+}
+
+// === UI STATE MANAGEMENT ===
+function showCamera() {
+    if (dom.scanBtn) dom.scanBtn.style.display = 'block';
+    if (dom.video) dom.video.style.display = 'block';
+    if (dom.previewImg) dom.previewImg.style.display = 'none';
+    if (dom.rabbitLogo) dom.rabbitLogo.style.display = 'none';
+    if (dom.results) dom.results.style.display = 'none';
+}
+
+function showResults(imageDataUrl) {
+    if (dom.scanBtn) dom.scanBtn.style.display = 'none';
+    if (dom.video) dom.video.style.display = 'none';
+    if (dom.previewImg) {
+        dom.previewImg.src = imageDataUrl;
+        dom.previewImg.style.display = 'block';
+    }
+    if (dom.rabbitLogo) dom.rabbitLogo.style.display = 'block';
+}
+
+function setStatus(message) {
+    console.log('[STATUS]', message);
+    if (dom.status) {
+        dom.status.textContent = message;
+    }
 }
 
 // === EVENT LISTENERS ===
 function setupEventListeners() {
-    if (dom.captureButton) {
-        dom.captureButton.addEventListener('click', captureImage);
+    if (dom.scanBtn) {
+        dom.scanBtn.addEventListener('click', captureImage);
     }
 }
 
 // === CAMERA FUNCTIONS ===
 function startCamera() {
     console.log('[CAMERA] Starting camera...');
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(mediaStream => {
-            stream = mediaStream;
-            if (dom.video) {
-                dom.video.srcObject = stream;
-            }
-            console.log('[CAMERA] Camera started successfully');
-        })
-        .catch(err => {
-            console.error('[CAMERA] Error accessing camera:', err);
-        });
+    setStatus('Starting camera...');
+    
+    navigator.mediaDevices.getUserMedia({ 
+        video: { 
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+        } 
+    })
+    .then(mediaStream => {
+        stream = mediaStream;
+        if (dom.video) {
+            dom.video.srcObject = stream;
+        }
+        console.log('[CAMERA] Camera started successfully');
+        setStatus('Ready to scan');
+        showCamera();
+    })
+    .catch(err => {
+        console.error('[CAMERA] Error accessing camera:', err);
+        setStatus('Camera error: ' + err.message);
+    });
 }
 
 function captureImage() {
-    console.log('captureImage dom.video:', dom.video, 'dom.canvas:', dom.canvas);
-    
-    if (!dom.video || !dom.canvas) {
-        console.warn('[CAPTURE] Missing DOM elements, creating canvas dynamically');
-        
-        // Create canvas dynamically if it doesn't exist
-        if (!dom.canvas) {
-            dom.canvas = document.createElement('canvas');
-            dom.canvas.id = 'captureCanvas';
-            dom.canvas.style.display = 'none';
-            document.body.appendChild(dom.canvas);
-        }
-    }
+    console.log('[CAPTURE] Capturing image...');
+    setStatus('Capturing image...');
     
     if (!dom.video || !stream) {
         console.error('[CAPTURE] Video element or stream not available');
+        setStatus('Camera not ready');
         return;
+    }
+    
+    // Create canvas if it doesn't exist
+    if (!dom.canvas) {
+        dom.canvas = document.createElement('canvas');
+        dom.canvas.id = 'captureCanvas';
+        dom.canvas.style.display = 'none';
+        document.body.appendChild(dom.canvas);
     }
     
     const ctx = dom.canvas.getContext('2d');
@@ -112,28 +148,35 @@ function captureImage() {
     // Convert to image data
     const imageData = dom.canvas.toDataURL('image/jpeg', 0.9);
     
+    // Show preview immediately
+    showResults(imageData);
+    
     // Process with OCR
-    processImage(imageData);
+    runOCR(imageData);
 }
 
-function processImage(imageData) {
-    if (!dom.loading) return;
-    
-    dom.loading.style.display = 'block';
+function runOCR(imageData) {
+    setStatus('Processing receipt...');
     
     if (window.Tesseract) {
         Tesseract.recognize(imageData, 'eng', {
-            logger: m => console.log('[OCR]', m)
+            logger: m => {
+                if (m.status === 'recognizing text') {
+                    const progress = Math.round(m.progress * 100);
+                    setStatus(`Scanning: ${progress}%`);
+                }
+                console.log('[OCR]', m);
+            }
         }).then(({ data: { text } }) => {
             displayResults(text);
-            dom.loading.style.display = 'none';
+            setStatus('Scan complete!');
         }).catch(err => {
             console.error('[OCR] Error:', err);
-            dom.loading.style.display = 'none';
+            setStatus('OCR failed: ' + err.message);
         });
     } else {
         console.warn('[OCR] Tesseract not loaded');
-        dom.loading.style.display = 'none';
+        setStatus('OCR library not loaded');
     }
 }
 
@@ -145,20 +188,30 @@ function displayResults(text) {
     
     // Store result
     window.storage.set('lastScan', text);
+    window.storage.set('lastScanTime', new Date().toISOString());
+    
+    console.log('[RESULTS] Text extracted:', text.substring(0, 100) + '...');
 }
 
 // === INITIALIZATION ===
 function init() {
+    console.log('[INIT] Initializing Rabbit Receipt Scanner...');
     cacheDom();
     setupEventListeners();
-    reset();
     
     // Load Tesseract.js
     if (!window.Tesseract && typeof importScripts !== 'function') {
         const script = document.createElement('script');
         script.src = 'https://unpkg.com/tesseract.js@v4/dist/tesseract.min.js';
+        script.onload = () => {
+            console.log('[INIT] Tesseract.js loaded');
+            setStatus('OCR ready');
+        };
         document.head.appendChild(script);
     }
+    
+    // Start camera
+    reset();
 }
 
 function reset() {
@@ -172,5 +225,4 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
-
 })();
