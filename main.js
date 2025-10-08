@@ -35,6 +35,8 @@
     dom.resultContainer = qs('resultContainer');
     dom.ocrText = qs('ocrText');
     dom.capturedImage = qs('capturedImage');
+    dom.thinkingGif = qs('thinkingGif');
+    dom.nextScanBtn = qs('nextScanBtn');
   }
   function ensureDom() {
     cacheDom();
@@ -47,11 +49,19 @@
     if (dom.status) dom.status.textContent = text;
     console.log('Status:', text);
   }
+  function showThinking(show) {
+    if (!dom.thinkingGif) return;
+    dom.thinkingGif.style.display = show ? 'block' : 'none';
+  }
+  function showNextScan(show) {
+    if (!dom.nextScanBtn) return;
+    dom.nextScanBtn.style.display = show ? 'inline-block' : 'none';
+  }
   // State machine
   function setState(newState) {
     console.log('State transition:', state, '→', newState);
     state = newState;
-    // KEY FIX: In camera state, hide button and show video immediately
+    // Button vs video visibility
     if (dom.btnScan) dom.btnScan.style.display = (state === States.idle) ? 'block' : 'none';
     if (dom.video) {
       dom.video.style.display = (state === States.camera) ? 'block' : 'none';
@@ -60,6 +70,10 @@
     if (dom.resultContainer) {
       dom.resultContainer.style.display = (state === States.results) ? 'block' : 'none';
     }
+    // Thinking GIF visibility by state
+    if (state === States.processing) showThinking(true); else showThinking(false);
+    // Next Scan button visibility by state
+    showNextScan(state === States.results);
     // Status updates
     if (state === States.idle) updateStatus('Ready to scan');
     else if (state === States.camera) updateStatus('Camera active - Click video or press PTT to capture');
@@ -113,7 +127,7 @@
   }
   async function captureAndProcess() {
     if (state !== States.camera) return;
-    setState(States.processing);
+    setState(States.processing); // will show thinking GIF
     try {
       if (!dom.canvas || !dom.video) throw new Error('Canvas or video missing');
       const ctx = dom.canvas.getContext('2d');
@@ -146,6 +160,8 @@
   async function runOCR(dataUrl) {
     try {
       updateStatus('OCR in progress...');
+      // Ensure GIF is visible while OCR runs
+      showThinking(true);
       const result = await Tesseract.recognize(dataUrl, 'deu+eng', {
         logger: m => {
           if (m.status === 'recognizing text') {
@@ -160,18 +176,18 @@
       }
       updateStatus('OCR complete - Sending to AI...');
       await sendToAIWithEmbeddedDataUrl(dataUrl, text);
-      setState(States.results);
+      setState(States.results); // will hide GIF and show Next Scan
       updateStatus('Done! Press R to scan again.');
     } catch (err) {
       console.error('OCR error:', err);
       updateStatus('OCR failed: ' + err.message);
-      setState(States.results);
+      setState(States.results); // hide GIF, allow next scan
     }
   }
   // Modified function to send email action with embedded dataUrl via LLM only
   async function sendToAIWithEmbeddedDataUrl(dataUrl, ocrText) {
     // Construct the prompt for the LLM
-    const prompt = `You are an assistant. Please email the attached image to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","subject":"Receipt Scan","body":"Here is my scanned receipt data...","attachments":[{"dataUrl":"<dataUrl>"}]}`;
+    const prompt = `You are an assistant. Please email the attached image to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","subject":"Receipt Scan","body":"Here is my scanned receipt data...","attachments":[{"dataUrl":"<dataurl>"}]}`;
     
     // Construct the complete payload with embedded dataUrl
     const payload = {
@@ -216,6 +232,9 @@
     imageCapture = null;
     zoomLevel = 1;
     currentBlob = null;
+    // hide thinking GIF and next button on reset
+    showThinking(false);
+    showNextScan(false);
     setState(States.idle);
   }
   // Mouse wheel zoom over video
@@ -248,8 +267,9 @@
   // Bind events
   function bindEvents() {
     dom.btnScan?.addEventListener('click', onScan);
+    dom.nextScanBtn?.addEventListener('click', onReset);
     
-    // KEY FIX: Click on video triggers capture
+    // Click on video triggers capture
     dom.video?.addEventListener('click', () => {
       if (state === States.camera) captureAndProcess();
     });
