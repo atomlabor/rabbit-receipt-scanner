@@ -205,7 +205,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: 'Summarise all the important information from this image and then send me all the data by email.',
+          prompt: 'Summarise all the important information from this image and then send me all the data and the image by email.',
           image: base64Image,
           ocrText: ocrText
         })
