@@ -12,20 +12,19 @@
       font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     }
     .header {
-      background: #222;
-      color: #ffa500;
-      height: 32px;
-      line-height: 32px;
-      text-align: center;
-      font-weight: 600;
-      font-size: 13px;
+      background: #ff8800;
+      color: #fff;
+      height: 50px;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-weight: 600;
+      font-size: 16px;
     }
     .header img {
-      vertical-align: middle;
-      margin-right: 8px;
+      height: 32px;
+      width: 32px;
+      margin-right: 10px;
     }
     .content {
       width: 240px;
@@ -34,151 +33,96 @@
       padding: 0;
       display: flex;
       flex-direction: column;
+      align-items: center;
+      justify-content: center;
       position: relative;
-      overflow: hidden;
     }
-    .video-container, .preview-container {
-      flex: 1;
-      position: relative;
-      background: #000;
+    .scan-button {
+      background: #ff8800;
+      border: none;
+      border-radius: 15px;
+      padding: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      min-height: 80px;
+      min-width: 180px;
     }
-    video, img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
+    .scan-button:hover {
+      background: #e67700;
+      transform: scale(1.02);
+    }
+    .scan-button:active {
+      transform: scale(0.98);
+    }
+    .scan-button img {
+      height: 48px;
+      width: 48px;
     }
     .overlay {
-      position: absolute;
-      bottom: 0;
+      display: none;
+      position: fixed;
+      top: 0;
       left: 0;
-      right: 0;
-      background: rgba(0,0,0,0.7);
-      padding: 6px;
-      text-align: center;
-      font-size: 11px;
-    }
-    .btn-row {
-      display: flex;
-      gap: 4px;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      align-items: center;
       justify-content: center;
-      margin-top: 4px;
     }
-    button {
-      background: #ffa500;
-      color: #000;
-      border: none;
-      padding: 6px 10px;
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      border-radius: 4px;
+    .overlay.active {
+      display: flex;
     }
-    button:active {
-      background: #ff8800;
-    }
-    #status {
-      font-size: 10px;
-      color: #ffa500;
-      padding: 4px;
-    }
-    .results {
-      background: #111;
-      padding: 8px;
+    .overlay img {
+      max-width: 150px;
       max-height: 150px;
+    }
+    .output {
+      margin-top: 15px;
+      padding: 10px;
+      background: #222;
+      border: 2px solid #ff8800;
+      border-radius: 8px;
+      min-height: 60px;
+      width: 200px;
+      font-size: 12px;
+      line-height: 1.4;
+      word-wrap: break-word;
       overflow-y: auto;
-      font-size: 10px;
-      line-height: 1.3;
     }
-    textarea {
-      width: 100%;
-      min-height: 80px;
-      background: #222;
-      color: #fff;
-      border: 1px solid #444;
-      padding: 4px;
-      font-size: 10px;
-      font-family: monospace;
-      resize: vertical;
-    }
-    /* State management */
-    body:not(.state-camera) .state-camera { display: none; }
-    body:not(.state-preview) .state-preview { display: none; }
-
-    /* Email input styling */
-    .email-input-container {
-      padding: 6px 8px;
-      background: #1a1a1a;
-      border-bottom: 1px solid #333;
-    }
-    .email-input-container label {
-      display: block;
-      font-size: 10px;
-      color: #ffa500;
-      margin-bottom: 4px;
-      font-weight: 600;
-    }
-    #emailInput {
-      width: 100%;
-      background: #222;
-      color: #fff;
-      border: 1px solid #444;
-      padding: 6px;
+    .status {
+      color: #ff8800;
       font-size: 11px;
-      border-radius: 3px;
-      box-sizing: border-box;
-    }
-    #emailInput:focus {
-      outline: none;
-      border-color: #ffa500;
+      margin-bottom: 5px;
+      text-align: center;
     }
   </style>
 </head>
-<body class="state-camera">
+<body>
   <div class="header">
-    <img src="data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Crect fill='%23ffa500' width='20' height='20' rx='4'/%3E%3C/svg%3E" alt="">
+    <img src="r1-cam.png" alt="Rabbit Cam">
     Rabbit Receipt Scanner
   </div>
-
+  
   <div class="content">
-    <!-- Camera View -->
-    <div class="video-container state-camera">
-      <video id="video" autoplay playsinline></video>
-      <div class="overlay">
-        <div id="status">Starting...</div>
-        <div class="btn-row">
-          <button id="captureBtn">📸 Capture</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Preview View -->
-    <div class="preview-container state-preview">
-      <img id="preview" alt="Receipt Preview">
-      <div class="overlay">
-        <div id="status">Ready</div>
-        <div class="btn-row">
-          <button id="retakeBtn">↩ Retake</button>
-          <button id="ocrBtn">🔍 OCR</button>
-        </div>
-      </div>
+    <button id="scanButton" class="scan-button">
+      <img src="r1-cam.png" alt="Scan Receipt">
+    </button>
+    
+    <div id="status" class="status">Bereit zum Scannen</div>
+    
+    <div id="output" class="output">
+      Hier erscheint der gescannte Text...
     </div>
   </div>
-
-  <!-- Email Input Section -->
-  <div class="email-input-container state-preview">
-    <label for="emailInput">📧 Email Address:</label>
-    <input type="email" id="emailInput" placeholder="your@email.com" />
+  
+  <div id="overlay" class="overlay">
+    <img src="rabbit-thinking.gif" alt="Processing...">
   </div>
-
-  <!-- Results -->
-  <div class="results state-preview">
-    <textarea id="ocrText" placeholder="OCR results will appear here..."></textarea>
-    <div class="btn-row" style="margin-top:6px;">
-      <button id="sendBtn">📤 Send via Email</button>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  
   <script src="main.js"></script>
 </body>
 </html>
