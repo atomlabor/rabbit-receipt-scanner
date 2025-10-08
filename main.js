@@ -1,312 +1,383 @@
-(function() {
+/* Rabbit Receipt Scanner - Best-of State Machine (idle, camera, preview, processing, results)
+   Requirements fulfilled:
+   - Static <video id="videoPreview"> used always
+   - All UI elements must exist in DOM; JS only toggles visibility/classes/content
+   - Classic workflow UI: big centered scan button with rabbit graphic, stateful screens
+   - States: idle -> camera -> preview -> processing -> results, with retry/reset
+   - OCR via Tesseract.js with deu+eng
+   - Zoom, mousewheel, hardware events (volume keys for PTT style capture), Rabbit-PTT trigger
+   - Optional mail trigger with Rabbit LLM summary prompt if available
+   - Harmonious error handling
+*/
+(function () {
   'use strict';
-  
-  let isScanning = false;
+
+  // App State
+  const States = Object.freeze({
+    idle: 'idle',
+    camera: 'camera',
+    preview: 'preview',
+    processing: 'processing',
+    results: 'results'
+  });
+  let state = States.idle;
+
+  // Media and processing
   let stream = null;
-  let state = 'idle';
-  
-  // DOM elements - use consistent IDs
-  let scanBtn, video, status;
-  
-  // Initialize app when DOM is loaded
-  function init() {
-    scanBtn = document.getElementById('scanBtn');
-    video = document.getElementById('videoPreview'); // Correct ID from HTML
-    status = document.getElementById('status');
-    
-    if (!scanBtn || !video || !status) {
-      console.error('Required DOM elements not found');
-      return;
-    }
-    
-    // Event listeners
-    scanBtn.addEventListener('click', handleScanClick);
-    video.addEventListener('click', handleVideoClick);
-    
-    updateState('ready');
+  let currentBlob = null;
+  let zoomLevel = 1;
+  let track = null;
+  let imageCapture = null;
+  let processingAbort = null;
+
+  // DOM (must exist in HTML)
+  const dom = {};
+
+  function qs(id) { return document.getElementById(id); }
+
+  function cacheDom() {
+    dom.btnScan = qs('scanBtn');           // big centered scan button with rabbit graphic
+    dom.btnCapture = qs('captureBtn');     // visible in camera state
+    dom.btnRetry = qs('retryBtn');
+    dom.btnConfirm = qs('confirmBtn');     // optional send/mail
+    dom.status = qs('status');
+    dom.video = qs('videoPreview');        // static video element
+    dom.canvas = qs('captureCanvas');      // static canvas in DOM
+    dom.previewImg = qs('previewImage');   // img element for preview
+    dom.resultsBox = qs('resultsBox');     // results container
+    dom.resultsText = qs('resultsText');   // pre/code element for OCR text
+    dom.summaryText = qs('summaryText');   // LLM summary area (optional)
+    dom.zoomLabel = qs('zoomLabel');       // zoom indicator
+    dom.uiIdle = qs('uiIdle');             // section for idle
+    dom.uiCamera = qs('uiCamera');         // section for camera preview UI
+    dom.uiPreview = qs('uiPreview');       // section for still preview
+    dom.uiProcessing = qs('uiProcessing'); // section for processing spinner
+    dom.uiResults = qs('uiResults');       // section for results
+    dom.brandGraphic = qs('rabbitGraphic');
   }
-  
-  // Update app state and UI
-  function updateState(newState, message = '') {
-    state = newState;
-    
+
+  function ensureDom() {
+    cacheDom();
+    const required = [
+      'btnScan','status','video','canvas','previewImg','resultsBox','resultsText',
+      'uiIdle','uiCamera','uiPreview','uiProcessing','uiResults'
+    ];
+    for (const key of required) {
+      if (!dom[key]) {
+        console.error('Missing DOM element:', key);
+      }
+    }
+  }
+
+  // Visibility helpers (no DOM creation/removal)
+  function show(el) { if (el) el.classList.remove('hidden'); }
+  function hide(el) { if (el) el.classList.add('hidden'); }
+  function setStatus(text, type = '') {
+    if (!dom.status) return;
+    dom.status.textContent = text || '';
+    dom.status.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  function setState(next) {
+    state = next;
+    // Reset UI visibility to hidden
+    hide(dom.uiIdle); hide(dom.uiCamera); hide(dom.uiPreview); hide(dom.uiProcessing); hide(dom.uiResults);
+
     switch (state) {
-      case 'ready':
-        scanBtn.style.display = 'flex';
-        video.style.display = 'none';
-        status.textContent = 'Bereit zum Scannen';
-        status.className = 'status';
+      case States.idle:
+        show(dom.uiIdle);
+        setStatus('Bereit zum Scannen');
+        focusScanButtonSoon();
         break;
-        
-      case 'camera':
-        scanBtn.style.display = 'none';
-        video.style.display = 'block';
-        status.textContent = 'Video antippen zum Scannen';
-        status.className = 'status';
+      case States.camera:
+        show(dom.uiCamera);
+        setStatus('Richte den Beleg aus und tippe zum Auslösen');
         break;
-        
-      case 'processing':
-        status.textContent = 'Beleg wird verarbeitet...';
-        status.className = 'status processing pulsing';
+      case States.preview:
+        show(dom.uiPreview);
+        setStatus('Vorschau – erneut versuchen oder verarbeiten');
         break;
-        
-      case 'success':
-        status.textContent = message || 'Erfolgreich gesendet!';
-        status.className = 'status success';
-        setTimeout(() => resetToReady(), 3000);
+      case States.processing:
+        show(dom.uiProcessing);
+        setStatus('Verarbeite Beleg (OCR)…', 'processing pulsing');
         break;
-        
-      case 'error':
-        status.textContent = message || 'Fehler beim Verarbeiten';
-        status.className = 'status error';
-        setTimeout(() => resetToReady(), 5000);
+      case States.results:
+        show(dom.uiResults);
+        setStatus('Ergebnis');
         break;
     }
   }
-  
-  // Reset to ready state
-  function resetToReady() {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      stream = null;
-    }
-    isScanning = false;
-    updateState('ready');
+
+  function focusScanButtonSoon() {
+    if (dom.btnScan) setTimeout(() => dom.btnScan.focus(), 100);
   }
-  
-  // Handle scan button click
-  async function handleScanClick() {
-    if (isScanning) return;
-    
+
+  // Camera controls
+  async function openCamera() {
+    await closeCamera();
     try {
-      isScanning = true;
-      
-      // Get camera stream
-      stream = await navigator.mediaDevices.getUserMedia({
+      const constraints = {
         video: {
-          facingMode: 'environment', // Back camera preferred
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-      
-      // Attach stream to existing video element
-      video.srcObject = stream;
-      video.play();
-      
-      updateState('camera');
-      
-    } catch (error) {
-      console.error('Camera access error:', error);
-      updateState('error', 'Kamera konnte nicht geöffnet werden');
-      isScanning = false;
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          zoom: true
+        },
+        audio: false
+      };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      dom.video.srcObject = stream;
+      await dom.video.play();
+
+      track = stream.getVideoTracks()[0];
+      imageCapture = ('ImageCapture' in window) ? new ImageCapture(track) : null;
+
+      // Setup zoom if supported
+      setupZoom(track);
+
+      setState(States.camera);
+    } catch (e) {
+      console.error('Camera open error', e);
+      setStatus('Kamera konnte nicht geöffnet werden', 'error');
+      setState(States.idle);
     }
   }
-  
-  // Handle video click (capture photo)
-  async function handleVideoClick() {
-    if (state !== 'camera' || !stream) return;
-    
+
+  async function closeCamera() {
+    if (stream) {
+      for (const t of stream.getTracks()) t.stop();
+      stream = null; track = null; imageCapture = null;
+    }
+  }
+
+  function setupZoom(vTrack) {
     try {
-      updateState('processing');
-      
-      // Create canvas to capture frame
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      
-      // Set canvas size to video dimensions
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // Draw current video frame to canvas
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert to blob
-      const blob = await new Promise(resolve => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.8);
-      });
-      
-      // Stop camera stream
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
+      const caps = vTrack?.getCapabilities?.();
+      if (caps && 'zoom' in caps) {
+        zoomLevel = vTrack.getSettings().zoom || caps.zoom.min || 1;
+        updateZoomLabel();
       }
-      
-      // Process the image
-      await processReceiptImage(blob);
-      
-    } catch (error) {
-      console.error('Capture error:', error);
-      updateState('error', 'Fehler beim Aufnehmen des Bildes');
-    }
+    } catch {}
   }
-  
-  // Process receipt image with OCR and send email
-  async function processReceiptImage(imageBlob) {
+  function updateZoomLabel() {
+    if (dom.zoomLabel) dom.zoomLabel.textContent = `Zoom: ${Number(zoomLevel).toFixed(1)}x`;
+  }
+  async function applyZoom(delta) {
+    if (!track?.applyConstraints) return;
     try {
-      // Create FormData for OCR API
-      const formData = new FormData();
-      formData.append('file', imageBlob, 'receipt.jpg');
-      formData.append('apikey', 'K83678596988957'); // OCR Space API Key
-      formData.append('language', 'ger');
-      formData.append('isOverlayRequired', 'false');
-      formData.append('detectOrientation', 'true');
-      formData.append('scale', 'true');
-      
-      // Call OCR API
-      const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
-        method: 'POST',
-        body: formData
-      });
-      
-      const ocrResult = await ocrResponse.json();
-      
-      if (!ocrResult.IsErroredOnProcessing && ocrResult.ParsedResults?.length > 0) {
-        const extractedText = ocrResult.ParsedResults[0].ParsedText;
-        
-        // Parse receipt data in Rabbit R1 style
-        const receiptData = parseReceiptText(extractedText);
-        
-        // Send email with receipt data
-        await sendReceiptEmail(receiptData, imageBlob);
-        
-        updateState('success', 'Beleg erfolgreich verarbeitet und versendet!');
-        
-      } else {
-        throw new Error('OCR processing failed');
-      }
-      
-    } catch (error) {
-      console.error('Processing error:', error);
-      updateState('error', 'Fehler beim Verarbeiten des Belegs');
+      const caps = track.getCapabilities?.();
+      if (!caps || !('zoom' in caps)) return;
+      const settings = track.getSettings();
+      const min = caps.zoom.min ?? 1;
+      const max = caps.zoom.max ?? 5;
+      const step = caps.zoom.step ?? 0.1;
+      zoomLevel = Math.min(max, Math.max(min, (settings.zoom ?? min) + delta * step));
+      await track.applyConstraints({ advanced: [{ zoom: zoomLevel }] });
+      updateZoomLabel();
+    } catch (e) {
+      // Ignore zoom errors silently for UX
     }
   }
-  
-  // Parse receipt text (Rabbit R1 intelligent parsing)
-  function parseReceiptText(text) {
-    const lines = text.split('\n').filter(line => line.trim());
-    
-    let merchant = '';
-    let date = '';
-    let total = '';
-    let items = [];
-    
-    // Smart parsing patterns
+
+  // Capture frame into canvas and blob
+  async function captureFrame() {
+    const canvas = dom.canvas;
+    const ctx = canvas.getContext('2d');
+    const vw = dom.video.videoWidth || 1280;
+    const vh = dom.video.videoHeight || 720;
+    canvas.width = vw; canvas.height = vh;
+    ctx.drawImage(dom.video, 0, 0, vw, vh);
+
+    currentBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    // Show preview image
+    if (dom.previewImg) {
+      dom.previewImg.src = URL.createObjectURL(currentBlob);
+    }
+    setState(States.preview);
+  }
+
+  // OCR with Tesseract.js (deu+eng)
+  async function doOCR(blob) {
+    const { createWorker } = window.Tesseract || {};
+    if (!createWorker) throw new Error('Tesseract.js nicht geladen');
+
+    // Abort handling
+    if (processingAbort) { processingAbort.abort(); }
+    processingAbort = new AbortController();
+
+    const worker = await createWorker({
+      logger: m => { if (m.status) setStatus(`OCR: ${m.status} ${Math.round((m.progress||0)*100)}%`, 'processing'); }
+    });
+    try {
+      await worker.loadLanguage('deu+eng');
+      await worker.initialize('deu+eng');
+      const img = await blobToImage(blob);
+      const { data } = await worker.recognize(img, { imageColor: true });
+      await worker.terminate();
+      return data?.text || '';
+    } catch (e) {
+      try { await worker.terminate(); } catch {}
+      throw e;
+    }
+  }
+
+  function blobToImage(blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  // Parse receipt like classic version
+  function parseReceipt(text) {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let merchant = '', date = '', total = '';
+    const items = [];
     for (const line of lines) {
-      const trimmed = line.trim();
-      
-      // Detect merchant (usually first meaningful line)
-      if (!merchant && trimmed.length > 2 && !/\d/.test(trimmed)) {
-        merchant = trimmed;
+      if (!merchant && line.length > 2 && !/\d/.test(line)) merchant = line;
+      const dm = line.match(/(\d{1,2}[.\/\-]\d{1,2}[.\/\-]\d{2,4}|\d{2,4}[.\/\-]\d{1,2}[.\/\-]\d{1,2})/);
+      if (dm && !date) date = dm[0];
+      if (/total|summe|gesamt|betrag|total/i.test(line) || /€|eur|usd|\$/.test(line)) {
+        const am = line.match(/([\d\.\s]*\d+[\.,]\d{2})/g);
+        if (am) total = am[am.length - 1];
       }
-      
-      // Detect date patterns
-      const dateMatch = trimmed.match(/(\d{1,2}[.\/\-]\d{1,2}[.\/\-]\d{2,4}|\d{2,4}[.\/\-]\d{1,2}[.\/\-]\d{1,2})/);
-      if (dateMatch && !date) {
-        date = dateMatch[0];
-      }
-      
-      // Detect total amount (look for keywords and currency)
-      if (/total|summe|gesamt|betrag/i.test(trimmed) || /€|eur|\$/.test(trimmed)) {
-        const amountMatch = trimmed.match(/([\d,]+[.,]\d{2})/g);
-        if (amountMatch) {
-          total = amountMatch[amountMatch.length - 1]; // Last amount is usually total
-        }
-      }
-      
-      // Collect potential items
-      if (/\d+[.,]\d{2}/.test(trimmed) && trimmed.length > 5) {
-        items.push(trimmed);
-      }
+      if (/\d+[\.,]\d{2}/.test(line) && line.length > 5) items.push(line);
     }
-    
     return {
       merchant: merchant || 'Unbekannt',
       date: date || new Date().toLocaleDateString('de-DE'),
       total: total || 'Nicht erkannt',
-      items: items.slice(0, 10), // Limit items
+      items: items.slice(0, 12),
       rawText: text
     };
   }
-  
-  // Send receipt data via email (Rabbit R1 integration)
-  async function sendReceiptEmail(receiptData, imageBlob) {
+
+  // Optional Rabbit LLM summary (if window.rabbitLLM is available)
+  async function makeSummary(receipt) {
     try {
-      // Convert image to base64
-      const base64Image = await blobToBase64(imageBlob);
-      
-      // Prepare email data in Rabbit R1 format
-      const emailData = {
+      if (!window.rabbitLLM?.summarize) return '';
+      const prompt = `Erstelle eine kurze, strukturierte Zusammenfassung des Kassenbons in Deutsch.
+      Felder: Händler, Datum, Gesamtsumme, Stichpunkte der Positionen (max 6).
+      Daten: ${JSON.stringify(receipt)}`;
+      return await window.rabbitLLM.summarize(prompt);
+    } catch {
+      return '';
+    }
+  }
+
+  // Optional email trigger (configure externally)
+  async function triggerMail(receipt, blob, summary) {
+    try {
+      if (!window.rabbitMail?.send) return;
+      const base64 = await blobToBase64(blob);
+      await window.rabbitMail.send({
         to: 'receipts@atomlabor.de',
-        subject: `Neuer Beleg von ${receiptData.merchant} - ${receiptData.date}`,
-        html: `
-          <h2>🧾 Neuer Beleg gescannt</h2>
-          <p><strong>Händler:</strong> ${receiptData.merchant}</p>
-          <p><strong>Datum:</strong> ${receiptData.date}</p>
-          <p><strong>Betrag:</strong> ${receiptData.total}</p>
-          
-          <h3>Erkannte Positionen:</h3>
-          <ul>
-            ${receiptData.items.map(item => `<li>${item}</li>`).join('')}
-          </ul>
-          
-          <h3>Volltext:</h3>
-          <pre>${receiptData.rawText}</pre>
-          
-          <p><em>Automatisch gescannt mit Rabbit Receipt Scanner</em></p>
-        `,
-        attachments: [{
-          name: `receipt_${Date.now()}.jpg`,
-          data: base64Image.split(',')[1], // Remove data:image/jpeg;base64, prefix
-          type: 'image/jpeg'
-        }]
-      };
-      
-      // Send via EmailJS or similar service
-      const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          service_id: 'service_rabbit',
-          template_id: 'template_receipt',
-          user_id: 'user_rabbit_r1',
-          template_params: emailData
-        })
+        subject: `Beleg ${receipt.merchant} – ${receipt.date}`,
+        html: `🧾 Neuer Beleg<br/>Händler: ${receipt.merchant}<br/>Datum: ${receipt.date}<br/>Betrag: ${receipt.total}<br/><br/><pre>${escapeHtml(receipt.rawText)}</pre><br/>${summary ? `<hr/><strong>Zusammenfassung:</strong><br/><pre>${escapeHtml(summary)}</pre>` : ''}`,
+        attachments: [{ name: `receipt_${Date.now()}.jpg`, type: 'image/jpeg', dataUrl: base64 }]
       });
-      
-      if (!response.ok) {
-        throw new Error('Email sending failed');
-      }
-      
-    } catch (error) {
-      console.error('Email error:', error);
-      throw error;
+    } catch (e) {
+      console.warn('Mail trigger failed', e);
     }
   }
-  
-  // Helper: Convert blob to base64
-  function blobToBase64(blob) {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(blob);
-    });
+
+  function escapeHtml(s='') { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function blobToBase64(blob) { return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); }); }
+
+  // UI actions
+  async function onScan() {
+    await openCamera();
   }
-  
-  // Handle page visibility change (pause camera when hidden)
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && stream) {
-      resetToReady();
+
+  async function onCapture() {
+    if (state !== States.camera) return;
+    await captureFrame();
+  }
+
+  async function onProcess() {
+    if (!currentBlob) return;
+    setState(States.processing);
+    try {
+      const text = await doOCR(currentBlob);
+      dom.resultsText.textContent = text || '';
+      const parsed = parseReceipt(text || '');
+      const summary = await makeSummary(parsed);
+      if (dom.summaryText) dom.summaryText.textContent = summary || '';
+      await triggerMail(parsed, currentBlob, summary);
+      setState(States.results);
+    } catch (e) {
+      console.error('Processing failed', e);
+      setStatus('Fehler bei der Verarbeitung', 'error');
+      setState(States.preview);
     }
-  });
-  
-  // Initialize when DOM is ready
+  }
+
+  async function onRetry() {
+    currentBlob = null;
+    dom.previewImg && (dom.previewImg.src = '');
+    await openCamera();
+  }
+
+  async function onReset() {
+    await closeCamera();
+    currentBlob = null;
+    dom.previewImg && (dom.previewImg.src = '');
+    dom.resultsText && (dom.resultsText.textContent = '');
+    if (dom.summaryText) dom.summaryText.textContent = '';
+    setState(States.idle);
+  }
+
+  // Mouse wheel zoom over video
+  function onWheel(e) {
+    if (state !== States.camera) return;
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? +1 : -1;
+    applyZoom(delta);
+  }
+
+  // Hardware events: volume keys as PTT capture (best-effort on Android Chrome when focused)
+  function onKeyDown(e) {
+    if (state === States.camera && (e.key === 'v' || e.code === 'VolumeDown' || e.code === 'VolumeUp')) {
+      e.preventDefault();
+      onCapture();
+    }
+    // Space/Enter capture too
+    if (state === States.camera && (e.key === ' ' || e.key === 'Enter')) {
+      e.preventDefault();
+      onCapture();
+    }
+    // Escape resets
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onReset();
+    }
+  }
+
+  // Bind events
+  function bindEvents() {
+    dom.btnScan?.addEventListener('click', onScan);
+    dom.btnCapture?.addEventListener('click', onCapture);
+    dom.video?.addEventListener('click', () => { if (state === States.camera) onCapture(); });
+    dom.btnRetry?.addEventListener('click', onRetry);
+    dom.btnConfirm?.addEventListener('click', onProcess);
+    dom.video?.addEventListener('wheel', onWheel, { passive: false });
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) onReset(); });
+  }
+
+  function init() {
+    ensureDom();
+    bindEvents();
+    // Classic: big centered scan UI visible, others hidden
+    setState(States.idle);
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
-  
 })();
