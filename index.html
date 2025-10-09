@@ -78,9 +78,14 @@
       border: none;
       cursor: pointer;
       padding: 0;
-      margin: 10px auto;
+      margin: 0;
       display: none;
       flex-shrink: 0;
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 11;
     }
     #captureButton.active {
       display: block;
@@ -117,14 +122,14 @@
 </head>
 <body>
   <div class="header">
-    <img src="r1-cam.png" alt="R1 Logo">
-    <span>Receipt Scanner</span>
+    <img src="rabbit.png" alt="R1 Logo">
+    Receipt Scanner
   </div>
   <div class="content">
     <button id="scanButton">Scan starten</button>
     <video id="video" autoplay playsinline></video>
     <button id="captureButton"><img src="r1-cam.png" alt="Capture"></button>
-    <div class="overlay" id="overlay"></div>
+    <div id="overlay" class="overlay"></div>
     <canvas id="canvas"></canvas>
     <div id="result"></div>
   </div>
