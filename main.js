@@ -387,32 +387,31 @@ function buildRfc5322Body(html, charset = 'utf-8') {
   return headers + qp;
 }
 
-/* ---------- Bilingual Mail + strikter Prompt ---------- */
+/* ---------- Mail + strikter Prompt ---------- */
 async function sendStructuredEmail(extracted, cleanedOcr) {
+  // 1) Sauberes HTML für die Mail
   const html = buildBilingualEmailHTML(extracted, cleanedOcr);
-  // harte Bremse gegen Mega-Mails
   const htmlMax = html.length > 200000 ? html.slice(0, 200000) : html;
 
-  // UTF-8, damit € sicher durchkommt
-  const rawEmailBody = buildRfc5322Body(htmlMax, 'utf-8');
 
   const envelope = {
     action: 'email',
-    subject: 'your Rabbit Rece1pt Scan',
-    body: rawEmailBody
+    subject: 'your rabbit rece1pt scan',
+    body: `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${htmlMax}</body></html>`
   };
 
-const prompt =
-  'You are an assistant. Please email the receipt text below to the recipient.\n' +
-  'Return ONLY valid JSON. No markdown, no code fences, no commentary, no extra fields.\n' +
-  'Output MUST be EXACTLY this JSON object (do not modify keys or values):\n' +
-  JSON.stringify(envelope);
 
-const payload = {
-  useLLM: true,
-  message: prompt,
-  imageDataUrl: capturedImageData
-};
+  const prompt =
+    'You are an assistant. Please email the receipt text below to the recipient.\n' +
+    'Return ONLY valid JSON. No markdown, no code fences, no commentary, no extra fields.\n' +
+    'Output MUST be EXACTLY this JSON object (do not modify keys or values):\n' +
+    JSON.stringify(envelope);
+
+  const payload = {
+    useLLM: true,
+    message: prompt,
+    imageDataUrl: capturedImageData // optional: Bild als Anhang
+  };
 
   if (typeof PluginMessageHandler !== 'undefined') {
     PluginMessageHandler.postMessage(JSON.stringify(payload));
@@ -421,6 +420,7 @@ const payload = {
     throw new Error('Plugin API nicht verfügbar');
   }
 }
+
 
 /* ---------- Capture + OCR Pipeline ---------- */
 async function captureAndScan() {
