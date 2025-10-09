@@ -34,20 +34,27 @@ async function initializeOCR() {
             tessedit_ocr_engine_mode: '1', // Use LSTM engine (best accuracy)
             tessedit_pageseg_mode: '6', // Assume a single uniform block of text
             tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzäöüÄÖÜß€.,:-/()* ',
+            // Quality/speed settings - prioritize accuracy over speed
+            tessedit_do_invert: '0',
+            edges_use_new_outline_complexity: '1',
+            textord_heavy_nr: '1',
+            // Additional precision settings
+            tessedit_enable_dict_correction: '1',
+            classify_enable_adaptive_matcher: '1',
+            classify_enable_learning: '1'
         });
         
-        statusText.textContent = 'OCR bereit!';
-        await new Promise(resolve => setTimeout(resolve, 500));
         hideThinkingOverlay();
-        console.log('[OCR] Engine ready');
+        console.log('[OCR] Worker initialized successfully with slow precise mode');
     } catch (error) {
-        console.error('[OCR] Initialization failed:', error);
-        statusText.textContent = 'OCR-Initialisierung fehlgeschlagen!';
+        console.error('[OCR] Failed to initialize:', error);
         hideThinkingOverlay();
+        result.innerHTML = '❌ OCR Initialisierung fehlgeschlagen';
+        result.style.display = 'block';
+        result.classList.add('has-content');
     }
 }
 
-// Show/hide thinking overlay
 function showThinkingOverlay() {
     thinkingOverlay.style.display = 'flex';
 }
@@ -56,63 +63,104 @@ function hideThinkingOverlay() {
     thinkingOverlay.style.display = 'none';
 }
 
-// Start camera and show overlay
 async function startCamera() {
     try {
         console.log('[Camera] Starting camera...');
-        scanButton.classList.add('hidden');
+        scanButton.style.display = 'none';
         
-        stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: 'environment' } 
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
         });
         
         video.srcObject = stream;
-        await video.play();
+        video.style.display = 'block';
+        captureButton.style.display = 'block';
         
-        overlay.style.display = 'flex';
         console.log('[Camera] Camera started successfully');
     } catch (error) {
-        console.error('[Camera] Failed to start camera:', error);
-        alert('Kamera konnte nicht gestartet werden: ' + error.message);
-        scanButton.classList.remove('hidden');
+        console.error('[Camera] Failed to start:', error);
+        alert('Kamerazugriff fehlgeschlagen. Bitte überprüfen Sie die Berechtigungen.');
+        scanButton.style.display = 'block';
     }
 }
 
-// Stop camera
 function stopCamera() {
     if (stream) {
-        console.log('[Camera] Stopping camera...');
         stream.getTracks().forEach(track => track.stop());
-        stream = null;
+        video.style.display = 'none';
+        captureButton.style.display = 'none';
+        console.log('[Camera] Camera stopped');
     }
 }
 
-// Capture photo and start OCR
+// Function to send OCR text via Rabbit LLM with prompt-based approach
+async function sendOCRTextViaLLM(ocrText) {
+    try {
+        console.log('[Email] Attempting to send OCR text via Rabbit LLM...');
+        statusText.textContent = 'Versand OCR-Text per LLM...';
+        showThinkingOverlay();
+        
+        // Create prompt with embedded OCR text
+        const prompt = `You are an assistant. Please email the receipt text below to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","subject":"Rabbit Receipt Scan","body":"${ocrText.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"}`;
+        
+        const payload = {
+            useLLM: true,
+            message: prompt,
+            imageDataUrl: capturedImageData // Optional: include image attachment
+        };
+        
+        // Send via PluginMessageHandler
+        if (typeof PluginMessageHandler !== 'undefined') {
+            PluginMessageHandler.postMessage(JSON.stringify(payload));
+            console.log('[Email] Sent to AI via PluginMessageHandler');
+            hideThinkingOverlay();
+            statusText.textContent = 'Sent to AI...';
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            statusText.textContent = '';
+        } else {
+            console.warn('[Email] PluginMessageHandler not available, payload:', payload);
+            throw new Error('Plugin API not available');
+        }
+        
+    } catch (error) {
+        console.error('[Email] Failed to send OCR text:', error);
+        hideThinkingOverlay();
+        statusText.textContent = 'Versand fehlgeschlagen: ' + error.message;
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        statusText.textContent = '';
+    }
+}
+
 async function captureAndScan() {
     try {
-        console.log('[Capture] Capturing image...');
+        console.log('[Capture] Taking snapshot...');
         
-        // Draw current video frame to canvas
         const context = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Get image data from canvas
-        capturedImageData = canvas.toDataURL('image/png');
-        console.log('[Capture] Image captured');
+        capturedImageData = canvas.toDataURL('image/jpeg', 0.95);
         
-        // Hide overlay and stop camera
+        // No image display in overlay - just hide it
         overlay.style.display = 'none';
+        
         stopCamera();
         
-        // Start OCR processing with thinking overlay
-        statusText.textContent = 'Verarbeite Bild...';
-        showThinkingOverlay();
-        await new Promise(resolve => setTimeout(resolve, 800));
+        console.log('[Capture] Snapshot taken, starting OCR...');
         
-        statusText.textContent = 'Erkenne Text (dauert einen Moment)...';
-        await new Promise(resolve => setTimeout(resolve, 500));
+        statusText.textContent = 'Bereite OCR vor...';
+        showThinkingOverlay();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        statusText.textContent = 'Analysiere Text... bitte warten';
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        statusText.textContent = 'OCR läuft... dies kann einen Moment dauern';
         
         const { data: { text, confidence } } = await worker.recognize(capturedImageData);
         
@@ -125,7 +173,7 @@ async function captureAndScan() {
         
         // Display ONLY plain text result in the result div (no image preview)
         if (text && text.trim().length > 0) {
-            result.innerHTML = `✓ OCR Ergebnis (nur Text):<br/><br/>${text.replace(/\n/g, '<br/>')}`;
+            result.innerHTML = `✓ OCR Ergebnis (nur Text):<br><br>${text.replace(/\n/g, '<br>')}`;
         } else {
             result.innerHTML = '⚠️ Kein Text erkannt. Bitte versuchen Sie es erneut mit besserem Licht und Fokus.';
         }
@@ -160,6 +208,20 @@ async function captureAndScan() {
         scanButton.classList.remove('hidden');
     }
 }
+
+// Event listeners
+scanButton.addEventListener('click', () => {
+    result.innerHTML = '';
+    result.style.display = 'none';
+    result.classList.remove('has-content');
+    startCamera();
+});
+
+captureButton.addEventListener('click', captureAndScan);
+
+// Initialize OCR on page load
+initializeOCR();
+
 
 // Event listeners
 scanButton.addEventListener('click', () => {
