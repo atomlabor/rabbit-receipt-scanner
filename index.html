@@ -142,10 +142,9 @@
       display: flex;
     }
     #thinking-overlay img {
-      max-width: 180px;
-      max-height: 180px;
-      width: 180px;
-      height: auto;
+      width: 220px;
+      height: 220px;
+      object-fit: contain;
       margin-bottom: 10px;
     }
     #thinking-overlay .status-text {
@@ -187,17 +186,17 @@
 </head>
 <body>
   <div class="header">
-    <img src="r1-cam.png" alt="R1 Logo">
+    <img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/rabbit-r1-logo.png?raw=true" alt="R1 Logo">
     Receipt Scanner
   </div>
   <div class="content">
     <button id="scanButton">Scan starten</button>
-    <video autoplay playsinline id="video"></video>
-    <button id="captureButton"><img src="camera.png" alt="Capture"></button>
-    <div class="overlay" id="overlay"></div>
+    <video id="video" autoplay playsinline></video>
+    <button id="captureButton"><img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/camera-icon.svg?raw=true" alt="Capture"></button>
+    <div id="overlay" class="overlay"></div>
     <div id="thinking-overlay">
-      <img src="thinking.gif" alt="Processing...">
-      <div class="status-text" id="status-text">Analysiere... bitte warten</div>
+      <img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/rabbit-thinking.gif?raw=true" alt="Processing...">
+      <div id="status-text" class="status-text">Analysiere... bitte warten</div>
     </div>
     <canvas id="canvas"></canvas>
     <div id="result"></div>
