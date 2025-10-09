@@ -14,10 +14,7 @@ Wichtiger Hinweis zum aktuellen Stand:
 - UI-Sprache: Nur Deutsch. Die Benutzeroberfläche ist ausschließlich auf Deutsch verfügbar.
 - OCR-Sprachen: Texterkennung funktioniert für Deutsch und Englisch.
 - Versand nach jedem Scan: Ergebnistext und Foto werden automatisch per Rabbit LLM an die eigene Rabbit‑E‑Mail gesendet (nur echtes Rabbit‑Gerät).
-- OCR-Feld-Höhe: Der sichtbare OCR-Textbereich hat eine maximale Höhe von 160px.
-- Branding/Titel: Branding und Titel bleiben unverändert.
-- Ladeanimation: rabbit-thinking.gif wird als Ladeanimation verwendet.
-- Ko‑fi: Der Ko‑fi‑Button oben bleibt unverändert erhalten.
+
 
 ### 🎯 Über das Projekt
 Rabbit Receipt Scanner nutzt die Kamera des Rabbit R1, um Belege aufzunehmen und per OCR auszulesen. Die App ist für das Portrait‑Format des Rabbit R1 optimiert und sendet die erkannten Daten nach jedem Scan automatisch per E‑Mail über die Rabbit LLM API.
@@ -30,8 +27,8 @@ Hinweis: OCR (Optical Character Recognition) ist fehleranfällig – insbesonder
 - 🖼️ Bildvorverarbeitung: Helligkeit/Kontrast, Binarisierung, Canvas‑Filter
 - 📧 Automatischer E‑Mail‑Versand: `rabbit.llm.sendMailToSelf()` mit OCR‑Text + Original‑Foto als Anhang; funktioniert nur auf echtem Rabbit R1 (Browser simuliert)
 - 🎨 Intuitive UI: Dunkles Theme, großer Scan‑Button, Live‑Vorschau, hervorgehobene Ergebnisse
-- 📝 OCR‑Ausgabe: Sichtbereich mit `max-height: 160px` und Scrollmöglichkeit
-- ⏳ Ladeanimation: Verwendung von `rabbit-thinking.gif` während der Verarbeitung
+- 📝 OCR‑Ausgabe: Sichtbereich mit `max-height: 160px` 
+
 
 ### ⚠️ Wichtige Hinweise
 OCR kann fehlschlagen bei schlechter Beleuchtung, verknitterten/verschmutzten Belegen, Handschrift, ungewöhnlichen Fonts oder verblasstem Thermopapier. Für bessere Ergebnisse: gute Beleuchtung, Beleg flach ausrichten, Kamera senkrecht halten, vollständigen Ausschnitt erfassen, ggf. mehrfach scannen.
@@ -53,10 +50,7 @@ Current status note:
 - UI language: German only. The user interface is available in German only.
 - OCR languages: OCR works for German and English.
 - Post‑scan email: After each scan, the recognised text and the photo are mailed via Rabbit LLM to your Rabbit email (Rabbit device only).
-- OCR field height: The visible OCR text area has a maximum height of 160px.
-- Branding/title: Branding and title remain unchanged.
-- Loading animation: rabbit-thinking.gif is used as the loading animation.
-- Ko‑fi: The Ko‑fi button above remains unchanged.
+
 
 ### 🎯 About the project
 Rabbit Receipt Scanner uses the Rabbit R1 camera to capture receipts and read them via OCR. The app is optimised for the Rabbit R1 portrait layout and automatically emails the recognised data after every scan via the Rabbit LLM API.
@@ -69,8 +63,7 @@ Note: OCR can be error‑prone – especially in poor lighting, with crumpled re
 - 🖼️ Image pre‑processing: brightness/contrast, binarisation, canvas filters
 - 📧 Automatic email: `rabbit.llm.sendMailToSelf()` sends OCR text + original photo; works only on a real Rabbit R1 (browser simulates)
 - 🎨 Intuitive UI: dark theme, large scan button, live preview, highlighted results
-- 📝 OCR output: visible area with `max-height: 160px` and scroll capability
-- ⏳ Loading: uses `rabbit-thinking.gif` during processing
+- 📝 OCR output: visible area with `max-height: 160px` 
 
 ### ⚠️ Important notes
 OCR may fail with poor lighting, crumpled/dirty receipts, handwriting, unusual fonts, or faded thermal paper. For better results: use even lighting, place the receipt flat, hold the camera directly above, keep the receipt fully in frame, and retry if needed.
@@ -141,7 +134,7 @@ Note: The Rabbit LLM API only works on a real Rabbit R1. In a desktop browser th
 - Rabbit LLM API – available only on a real Rabbit R1
 
 ## 🤝 Credits
-Built by atomlabor for the Rabbit R1 community.
+Built by atomlabor.de for the Rabbit R1 community.
 - Rabbit R1 – hardware & LLM API
 - Tesseract.js – open‑source OCR engine
 - GitHub Pages – hosting
@@ -152,4 +145,4 @@ For questions or problems, please open an issue: https://github.com/atomlabor/ra
 ## 📄 Licence
 This project is publicly available and may be used freely (no specific licence).
 
-Made with ❤️ for Rabbit R1
+Made with ❤️ by Atomlabor.de for Rabbit R1
