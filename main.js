@@ -236,53 +236,5 @@ captureButton.addEventListener('click', captureAndScan);
 // Initialize OCR on page load
 initializeOCR();
 
-// Rabbit scroll hardware support for OCR result field
-(function() {
-    const resultField = document.getElementById('result');
-    
-    // Check if result field can be scrolled
-    function canScroll() {
-        return resultField && resultField.scrollHeight > resultField.clientHeight;
-    }
-    
-    // Handle wheel events
-    document.addEventListener('wheel', (e) => {
-        if (!canScroll()) return;
-        e.preventDefault();
-        
-        const scrollAmount = 30;
-        if (e.deltaY < 0) {
-            resultField.scrollTop -= scrollAmount;
-        } else if (e.deltaY > 0) {
-            resultField.scrollTop += scrollAmount;
-        }
-    }, { passive: false });
-    
-    // Handle keyboard arrow keys
-    document.addEventListener('keydown', (e) => {
-        if (!canScroll()) return;
-        
-        const scrollAmount = 30;
-        if (e.code === 'ArrowUp') {
-            e.preventDefault();
-            resultField.scrollTop -= scrollAmount;
-        } else if (e.code === 'ArrowDown') {
-            e.preventDefault();
-            resultField.scrollTop += scrollAmount;
-        }
-    });
-    
-    // Handle Rabbit hardware scroll wheel
-    if (window.rabbit && typeof window.rabbit.onScroll === 'function') {
-        window.rabbit.onScroll((delta) => {
-            if (!canScroll()) return;
-            
-            const scrollAmount = 30;
-            if (delta < 0) {
-                resultField.scrollTop -= scrollAmount;
-            } else if (delta > 0) {
-                resultField.scrollTop += scrollAmount;
-            }
-        });
-    }
+
 })();
