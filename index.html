@@ -34,168 +34,286 @@
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 15px;
+      font-size: 14px;
       text-align: center;
-      padding: 0 10px;
-      flex-shrink: 0;
-      overflow: hidden;
-      white-space: nowrap;
-      position: relative;
-      gap: 8px;
-    }
-    .header img {
-      height: 26px;
-      width: 26px;
-      object-fit: contain;
-      flex-shrink: 0;
-    }
-    .content {
-      position: relative;
-      height: calc(260px - 45px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 10px;
-      overflow: hidden;
-    }
-    button {
-      background: linear-gradient(135deg, #ff8800, #ff6600);
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      padding: 10px 20px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 12px rgba(255, 136, 0, 0.4);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
       position: relative;
       z-index: 10;
-      flex-shrink: 0;
     }
-    button:active {
-      transform: scale(0.95);
-      box-shadow: 0 2px 6px rgba(255, 136, 0, 0.3);
+    .logo {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      filter: invert(1);
     }
-    #captureButton {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      padding: 0;
-      display: none;
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: linear-gradient(135deg, #ff8800, #ff6600);
-      border: 4px solid rgba(255, 255, 255, 0.8);
-      box-shadow: 0 4px 20px rgba(255, 136, 0, 0.6);
-      z-index: 100;
-      overflow: hidden;
+    .container {
+      padding: 15px 15px 45px;
+      height: calc(100vh - 45px);
+      overflow-y: auto;
     }
-    #captureButton img {
-      width: 32px;
-      height: 32px;
-      object-fit: contain;
-    }
-    #captureButton:active {
-      transform: translateX(-50%) scale(0.9);
-    }
-    #video {
-      width: 220px;
-      height: 165px;
-      background: #1a1a1a;
-      border-radius: 10px;
-      display: none;
-      object-fit: cover;
-    }
-    .overlay {
-      position: absolute;
-      top: 50px;
-      left: 10px;
-      width: 220px;
-      height: 165px;
-      border: 3px dashed #ff8800;
-      border-radius: 10px;
-      pointer-events: none;
-      display: none;
-      z-index: 50;
-    }
-    #thinking-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 240px;
-      height: 260px;
-      background: rgba(0, 0, 0, 0.95);
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      gap: 15px;
-    }
-    #thinking-overlay img {
-      width: 80px;
-      height: 80px;
-      object-fit: contain;
-    }
-    #thinking-overlay .status-text {
-      color: #ff8800;
-      font-size: 13px;
-      font-weight: 600;
+    .upload-area {
+      border: 2px dashed #333;
+      border-radius: 8px;
+      padding: 20px;
       text-align: center;
-      padding: 0 20px;
-      line-height: 1.4;
+      background: #111;
+      margin-bottom: 15px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .upload-area:hover {
+      border-color: #555;
+      background: #1a1a1a;
+    }
+    .upload-area.dragover {
+      border-color: #ff6600;
+      background: #2a1a0a;
+    }
+    input[type="file"] {
+      display: none;
     }
     #result {
-      background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-      border: 2px solid #ff8800;
-      border-radius: 12px;
-      padding: 12px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 10px;
+      margin-top: 10px;
+      font-family: 'Courier New', monospace;
       font-size: 11px;
       line-height: 1.3;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #ccc;
+      max-height: 160px;
       overflow: auto;
-      min-height: 48px;
-      max-height: 120px;
-      width: 220px;
-      margin: 10px auto;
-      box-sizing: border-box;
-      flex-shrink: 0;
+      resize: vertical;
+    }
+    button {
+      background: linear-gradient(180deg, #ff8800 0%, #ff6600 100%);
       color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 12px;
+      margin: 5px 0;
+      width: 100%;
+      transition: all 0.2s;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+    }
+    button:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .status {
+      margin: 10px 0;
+      padding: 8px;
+      border-radius: 4px;
+      text-align: center;
+      font-size: 11px;
       font-weight: 500;
     }
-    #result.has-content {
-      box-shadow: 0 0 20px rgba(255, 136, 0, 0.3);
+    .status.success {
+      background: #1a4a1a;
+      color: #90ee90;
+      border: 1px solid #2a5a2a;
+    }
+    .status.error {
+      background: #4a1a1a;
+      color: #ff9999;
+      border: 1px solid #5a2a2a;
+    }
+    .status.info {
+      background: #1a2a4a;
+      color: #99ccff;
+      border: 1px solid #2a3a5a;
     }
     .loading {
-      font-size: 13px;
-      color: #ff8800;
-      font-weight: 600;
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #333;
+      border-radius: 50%;
+      border-top: 2px solid #ff6600;
+      animation: spin 1s linear infinite;
+      margin-right: 5px;
     }
-    #canvas {
-      display: none;
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 45px;
+      background: #111;
+      border-top: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #666;
+    }
+    .footer a {
+      color: #ff6600;
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <img src="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23fff'/%3E%3Ctext x='50' y='70' text-anchor='middle' font-size='60' font-family='Arial' fill='%23ff6600' font-weight='bold'%3ER%3C/text%3E%3C/svg%3E" alt="R1 Logo">
-    Receipt Scanner
+    <svg class="logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M12 22V12" stroke="currentColor" stroke-width="2"/>
+      <path d="M22 7L12 12L2 7" stroke="currentColor" stroke-width="2"/>
+    </svg>
+    Rabbit Receipt Scanner
   </div>
-  <div class="content">
-    <button id="scanButton">Scan starten</button>
-    <video id="video" autoplay playsinline></video>
-    <button id="captureButton"><img src="r1-cam.png" alt="Capture"></button>
-    <div class="overlay" id="overlay"></div>
-    <div id="thinking-overlay">
-      <img src="rabbit-thinking.gif" alt="Processing...">
-      <div class="status-text" id="status-text">Analysiere... bitte warten</div>
+  <div class="container">
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+      <p>📷 Klicke hier um Kassenbon zu scannen</p>
+      <input type="file" id="fileInput" accept="image/*" capture="environment">
     </div>
-    <canvas id="canvas"></canvas>
-    <div id="result"></div>
+    <div id="status"></div>
+    <textarea id="result" placeholder="OCR Ergebnis erscheint hier..."></textarea>
+    <button onclick="sendEmail()">📧 Email senden</button>
   </div>
-  <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
-  <script src="main.js"></script>
+  <div class="footer">
+    Made with ❤️ by <a href="https://atomlabor.de" target="_blank">Atomlabor</a>
+  </div>
+
+  <script>
+    document.getElementById('fileInput').addEventListener('change', handleFile);
+    
+    // Drag and drop functionality
+    const uploadArea = document.querySelector('.upload-area');
+    
+    uploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadArea.classList.add('dragover');
+    });
+    
+    uploadArea.addEventListener('dragleave', () => {
+      uploadArea.classList.remove('dragover');
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        processFile(files[0]);
+      }
+    });
+    
+    function handleFile(event) {
+      const file = event.target.files[0];
+      if (file) {
+        processFile(file);
+      }
+    }
+    
+    async function processFile(file) {
+      const status = document.getElementById('status');
+      const result = document.getElementById('result');
+      
+      // Show loading state
+      status.innerHTML = '<span class="loading"></span>Analysiere Kassenbon...';
+      status.className = 'status info';
+      result.value = '';
+      
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch('/api/ocr', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!response.ok) {
+          throw new Error('OCR-Verarbeitung fehlgeschlagen');
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          result.value = data.text;
+          status.innerHTML = '✅ Kassenbon erfolgreich analysiert!';
+          status.className = 'status success';
+        } else {
+          throw new Error(data.error || 'Unbekannter Fehler');
+        }
+        
+      } catch (error) {
+        console.error('Error:', error);
+        status.innerHTML = '❌ Fehler: ' + error.message;
+        status.className = 'status error';
+      }
+    }
+    
+    async function sendEmail() {
+      const result = document.getElementById('result');
+      const status = document.getElementById('status');
+      
+      if (!result.value.trim()) {
+        status.innerHTML = '❌ Bitte erst einen Kassenbon scannen!';
+        status.className = 'status error';
+        return;
+      }
+      
+      // Show loading state
+      status.innerHTML = '<span class="loading"></span>Sende Email...';
+      status.className = 'status info';
+      
+      try {
+        const response = await fetch('/api/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            text: result.value
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Email-Versand fehlgeschlagen');
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          status.innerHTML = '✅ Email erfolgreich gesendet!';
+          status.className = 'status success';
+          // Clear the result after successful email
+          result.value = '';
+        } else {
+          throw new Error(data.error || 'Unbekannter Fehler');
+        }
+        
+      } catch (error) {
+        console.error('Error:', error);
+        status.innerHTML = '❌ Fehler beim Email-Versand: ' + error.message;
+        status.className = 'status error';
+      }
+    }
+  </script>
 </body>
 </html>
