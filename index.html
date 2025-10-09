@@ -35,49 +35,41 @@
       margin-right: 10px;
     }
     .content {
-      width: 240px;
+      position: relative;
+      width: 100%;
       height: 210px;
       max-height: 210px;
-      margin: 0;
-      padding: 0;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      position: relative;
       overflow: hidden;
-    }
-    #video {
-      width: 100%;
-      height: 160px;
-      max-height: 160px;
-      object-fit: cover;
-      display: none;
-      flex-shrink: 0;
-    }
-    #video.active {
-      display: block;
     }
     #scanButton {
       background: #ff8800;
       color: #fff;
       border: none;
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-size: 14px;
+      font-size: 18px;
       font-weight: 600;
+      height: 50px;
+      width: 100%;
       cursor: pointer;
-      margin: 20px;
       flex-shrink: 0;
+      font-family: inherit;
     }
-    #scanButton:hover {
-      background: #ff9920;
+    #scanButton.hidden {
+      display: none;
+    }
+    #video {
+      width: 240px;
+      height: 210px;
+      object-fit: cover;
+      display: none;
+    }
+    #video.active {
+      display: block;
     }
     #captureButton {
       background: transparent;
       border: none;
-      cursor: pointer;
-      padding: 0;
       margin: 0;
       display: none;
       flex-shrink: 0;
@@ -100,6 +92,30 @@
       left: 50%;
       transform: translate(-50%, -50%);
       text-align: center;
+    }
+    /* Thinking overlay styles */
+    #thinking-overlay {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+    #thinking-overlay.active {
+      display: flex;
+    }
+    #thinking-overlay img {
+      max-width: 240px;
+      max-height: 240px;
+      width: 240px;
+      height: auto;
+      margin-top: 10px;
     }
     #result {
       padding: 16px;
@@ -130,6 +146,9 @@
     <video id="video" autoplay playsinline></video>
     <button id="captureButton"><img src="r1-cam.png" alt="Capture"></button>
     <div id="overlay" class="overlay"></div>
+    <div id="thinking-overlay">
+      <img src="rabbit-thinking.gif" alt="Processing...">
+    </div>
     <canvas id="canvas"></canvas>
     <div id="result"></div>
   </div>
