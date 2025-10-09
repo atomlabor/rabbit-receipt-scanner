@@ -35,117 +35,118 @@
       justify-content: center;
       font-weight: 700;
       font-size: 14px;
+      padding: 0 10px;
+      gap: 8px;
       flex-shrink: 0;
-      border-radius: 0 0 12px 12px;
-      box-shadow: 0 2px 8px rgba(255, 136, 0, 0.3);
     }
     .header img {
       height: 28px;
       width: 28px;
-      margin-right: 8px;
+      object-fit: contain;
+      flex-shrink: 0;
     }
     .content {
-      position: relative;
-      width: 240px;
       height: 215px;
+      min-height: 215px;
       max-height: 215px;
       display: flex;
       flex-direction: column;
+      padding: 10px;
       overflow: hidden;
-      padding: 0;
-    }
-    #scanButton {
-      background: linear-gradient(180deg, #ff8800 0%, #ff6600 100%);
-      color: #fff;
-      border: none;
-      border-radius: 20px;
-      font-size: 16px;
-      font-weight: 700;
-      height: 40px;
-      width: 200px;
-      margin: 20px auto;
-      cursor: pointer;
-      flex-shrink: 0;
-      font-family: inherit;
-      box-shadow: 0 4px 12px rgba(255, 136, 0, 0.4);
-      transition: transform 0.1s;
-    }
-    #scanButton:active {
-      transform: scale(0.95);
-    }
-    #scanButton.hidden {
-      display: none;
     }
     #video {
-      width: 240px;
-      height: 160px;
-      max-height: 160px;
+      width: 100%;
+      height: 100%;
+      border: 2px solid #ff8800;
+      border-radius: 12px;
+      background: #000;
       object-fit: cover;
       display: none;
-      flex-shrink: 0;
     }
     #video.active {
       display: block;
     }
-    #captureButton {
-      background: linear-gradient(135deg, #ff8800 0%, #ff4400 100%);
-      border: 4px solid #fff;
-      border-radius: 50%;
-      width: 60px;
-      height: 60px;
-      margin: 0;
-      display: none;
+    #scanButton {
+      background: linear-gradient(180deg, #ff8800 0%, #ff6600 100%);
+      color: white;
+      border: none;
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 4px 12px rgba(255, 136, 0, 0.3);
       flex-shrink: 0;
+    }
+    #scanButton:hover {
+      background: linear-gradient(180deg, #ff9900 0%, #ff7700 100%);
+    }
+    #captureButton {
       position: absolute;
-      bottom: 10px;
+      bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 11;
+      width: 60px;
+      height: 60px;
+      border: 3px solid #ff8800;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.7);
       cursor: pointer;
-      box-shadow: 0 4px 16px rgba(255, 68, 0, 0.6);
-      transition: transform 0.1s;
-    }
-    #captureButton:active {
-      transform: translateX(-50%) scale(0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(255, 136, 0, 0.4);
+      z-index: 10;
+      padding: 0;
     }
     #captureButton.active {
-      display: block;
+      display: flex;
     }
     #captureButton img {
       width: 32px;
       height: 32px;
-      filter: brightness(0) invert(1);
+      object-fit: contain;
+    }
+    #captureButton:hover {
+      background: rgba(255, 136, 0, 0.2);
+      border-color: #ff9900;
     }
     .overlay {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-      color: #ff8800;
-      font-weight: 600;
-    }
-    #thinking-overlay {
-      display: none;
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
+      border: 2px solid #ff8800;
+      border-radius: 12px;
+      pointer-events: none;
+      display: none;
+    }
+    .overlay.active {
+      display: block;
+    }
+    #thinking-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 240px;
+      height: 260px;
       background: rgba(0, 0, 0, 0.95);
-      z-index: 1000;
-      justify-content: center;
-      align-items: center;
+      display: none;
       flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      gap: 15px;
     }
     #thinking-overlay.active {
       display: flex;
     }
     #thinking-overlay img {
-      width: 220px;
-      height: 220px;
+      width: 80px;
+      height: 80px;
       object-fit: contain;
-      margin-bottom: 10px;
     }
     #thinking-overlay .status-text {
       color: #ff8800;
@@ -186,13 +187,13 @@
 </head>
 <body>
   <div class="header">
-    <img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/rabbit-r1-logo.png?raw=true" alt="R1 Logo">
+    <img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/r1-cam.png?raw=true" alt="R1 Logo">
     Receipt Scanner
   </div>
   <div class="content">
     <button id="scanButton">Scan starten</button>
     <video id="video" autoplay playsinline></video>
-    <button id="captureButton"><img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/camera-icon.svg?raw=true" alt="Capture"></button>
+    <button id="captureButton"><img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/r1-cam.png?raw=true" alt="Capture"></button>
     <div id="overlay" class="overlay"></div>
     <div id="thinking-overlay">
       <img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/rabbit-thinking.gif?raw=true" alt="Processing...">
