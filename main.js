@@ -1,4 +1,5 @@
 /* Rabbit Receipt Scanner - Jens Special Edition */
+
 // Initialize Tesseract
 const { createWorker } = Tesseract;
 let worker = null;
@@ -49,7 +50,9 @@ async function initializeOCR() {
     } catch (error) {
         console.error('[OCR] Failed to initialize:', error);
         hideThinkingOverlay();
-        setOverlay('OCR Initialisierung fehlgeschlagen');
+        result.innerHTML = '❌ OCR Initialisierung fehlgeschlagen';
+        result.style.display = 'block';
+        result.classList.add('has-content');
     }
 }
 
@@ -92,6 +95,9 @@ async function startCamera() {
     } catch (error) {
         console.error('[Camera] Failed to start:', error);
         setOverlay('Kamera-Zugriff fehlgeschlagen');
+        result.innerHTML = '❌ Kamera-Zugriff fehlgeschlagen. Bitte Berechtigungen prüfen.';
+        result.style.display = 'block';
+        result.classList.add('has-content');
     }
 }
 
@@ -162,7 +168,9 @@ function preprocessImage(canvas) {
 // Capture and scan with slow, precise OCR
 async function captureAndScan() {
     if (!worker) {
-        setOverlay('OCR nicht bereit');
+        result.innerHTML = '❌ OCR nicht bereit. Bitte warten Sie, bis die Initialisierung abgeschlossen ist.';
+        result.style.display = 'block';
+        result.classList.add('has-content');
         return;
     }
     
@@ -205,9 +213,13 @@ async function captureAndScan() {
         // Hide thinking overlay after OCR completes
         hideThinkingOverlay();
         
-        // Display result
+        // Display result in the result div
         overlay.innerHTML = '';
-        result.innerHTML = `<strong>OCR Ergebnis:</strong><br><br>${text.replace(/\n/g, '<br>')}`;
+        if (text && text.trim().length > 0) {
+            result.innerHTML = `<strong>✓ OCR Ergebnis:</strong><br><br>${text.replace(/\n/g, '<br>')}`;
+        } else {
+            result.innerHTML = '⚠️ Kein Text erkannt. Bitte versuchen Sie es erneut mit besserem Licht und Fokus.';
+        }
         result.classList.add('has-content');
         result.style.display = 'block';
         
@@ -221,7 +233,13 @@ async function captureAndScan() {
     } catch (error) {
         console.error('[OCR] Recognition failed:', error);
         hideThinkingOverlay();
-        setOverlay('OCR fehlgeschlagen');
+        
+        // Display error in result div
+        result.innerHTML = '❌ OCR fehlgeschlagen. Bitte versuchen Sie es erneut.';
+        result.style.display = 'block';
+        result.classList.add('has-content');
+        
+        overlay.innerHTML = '';
         stopCamera();
         scanButton.style.display = 'block';
         scanButton.classList.remove('hidden');
