@@ -236,5 +236,3 @@ captureButton.addEventListener('click', captureAndScan);
 // Initialize OCR on page load
 initializeOCR();
 
-
-})();
