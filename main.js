@@ -97,20 +97,20 @@ function stopCamera() {
     }
 }
 
-// Function to send email via LLM API
-async function sendEmailViaLLM(ocrText, imageDataUrl) {
+// Function to send OCR text via LLM API (no image attachment)
+async function sendOCRTextViaLLM(ocrText) {
     try {
-        console.log('[Email] Attempting to send via Rabbit LLM...');
-        statusText.textContent = 'Sende per Rabbit LLM...';
+        console.log('[Email] Attempting to send OCR text via Rabbit LLM...');
+        statusText.textContent = 'Versand OCR-Text per LLM...';
         showThinkingOverlay();
+        
+        const prompt = `Bitte sende das folgende OCR-Ergebnis als Text per E-Mail an mich selbst. Schicke keine Bilder, sondern nur den extrahierten Text im Mailbody. Hier ist der Text:\n\n${ocrText}`;
         
         const payload = {
             action: 'email',
-            subject: 'Scanned Receipt',
-            body: ocrText,
-            attachments: [{
-                dataUrl: imageDataUrl
-            }]
+            subject: 'OCR Text Result',
+            body: prompt
+            // No attachments - only plain text
         };
         
         // Try rabbit.llm.sendMailToSelf if available
@@ -130,12 +130,12 @@ async function sendEmailViaLLM(ocrText, imageDataUrl) {
         }
         
         hideThinkingOverlay();
-        statusText.textContent = 'Versandt!';
+        statusText.textContent = 'OCR-Text versandt!';
         await new Promise(resolve => setTimeout(resolve, 2000));
         statusText.textContent = '';
         
     } catch (error) {
-        console.error('[Email] Failed to send:', error);
+        console.error('[Email] Failed to send OCR text:', error);
         hideThinkingOverlay();
         statusText.textContent = 'Versand fehlgeschlagen: ' + error.message;
         await new Promise(resolve => setTimeout(resolve, 3000));
@@ -154,8 +154,8 @@ async function captureAndScan() {
         
         capturedImageData = canvas.toDataURL('image/jpeg', 0.95);
         
-        overlay.style.backgroundImage = `url(${capturedImageData})`;
-        overlay.style.display = 'block';
+        // No image display in overlay - just hide it
+        overlay.style.display = 'none';
         
         stopCamera();
         
@@ -179,10 +179,9 @@ async function captureAndScan() {
         // Hide thinking overlay after OCR completes
         hideThinkingOverlay();
         
-        // Display result in the result div
-        overlay.innerHTML = '';
+        // Display ONLY plain text result in the result div (no image preview)
         if (text && text.trim().length > 0) {
-            result.innerHTML = `✓ OCR Ergebnis:<br><br>${text.replace(/\n/g, '<br>')}`;
+            result.innerHTML = `✓ OCR Ergebnis (nur Text):<br><br>${text.replace(/\n/g, '<br>')}`;
         } else {
             result.innerHTML = '⚠️ Kein Text erkannt. Bitte versuchen Sie es erneut mit besserem Licht und Fokus.';
         }
@@ -197,9 +196,9 @@ async function captureAndScan() {
         console.log('[OCR] Result:', text);
         console.log('[OCR] Confidence:', confidence);
         
-        // Auto-send email via LLM after successful OCR
+        // Auto-send OCR text (no image) via LLM after successful OCR
         if (text && text.trim().length > 0) {
-            await sendEmailViaLLM(text, capturedImageData);
+            await sendOCRTextViaLLM(text);
         }
         
     } catch (error) {
@@ -211,7 +210,7 @@ async function captureAndScan() {
         result.style.display = 'block';
         result.classList.add('has-content');
         
-        overlay.innerHTML = '';
+        overlay.style.display = 'none';
         stopCamera();
         scanButton.style.display = 'block';
         scanButton.classList.remove('hidden');
