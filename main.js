@@ -305,64 +305,114 @@ function cleanOcrText(raw) {
     .trim();
 }
 
-/* ---------- Bilingual Mail-Build + strikter Prompt ---------- */
-function buildBilingualEmailBody(extracted, cleanedOcr) {
-  const summaryEn = [
-    'Invoice summary',
-    `- Number: ${extracted.invoiceNumber ?? '-'}`,
-    `- Date: ${extracted.date ?? '-'}`,
-    `- Net: ${extracted.net != null ? extracted.net.toFixed(2) : '-'} ${extracted.currency}`,
-    `- VAT: ${extracted.vat != null ? extracted.vat.toFixed(2) : '-'} ${extracted.currency}`,
-    `- VAT rate: ${extracted.vatRate != null ? extracted.vatRate + '%' : '-'}`,
-    `- Gross: ${extracted.gross != null ? extracted.gross.toFixed(2) : '-'} ${extracted.currency}`
-  ].join('\n');
+/* ---------- HTML + Quoted-Printable (UTF-8) ---------- */
+function buildBilingualEmailHTML(extracted, cleanedOcr) {
+  const fmt = (n, cur) => n != null ? `${n.toFixed(2)} ${cur}` : '—';
+  const esc = (s) => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-  const summaryDe = [
-    'Rechnungszusammenfassung',
-    `Nummer: ${extracted.invoiceNumber ?? '-'}`,
-    `Datum: ${extracted.date ?? '-'}`,
-    `Netto: ${extracted.net != null ? extracted.net.toFixed(2) : '-'} ${extracted.currency}`,
-    `MwSt: ${extracted.vat != null ? extracted.vat.toFixed(2) : '-'} ${extracted.currency}`,
-    `MwSt-Satz: ${extracted.vatRate != null ? extracted.vatRate + '%' : '-'}`,
-    `Brutto: ${extracted.gross != null ? extracted.gross.toFixed(2) : '-'} ${extracted.currency}`
-  ].join('\n');
+  const de = `
+  <h3 style="margin:0 0 8px 0;font-size:16px">Rechnungszusammenfassung</h3>
+  <table cellspacing="0" cellpadding="0" style="border-collapse:collapse">
+    <tr><td style="padding:2px 8px 2px 0">Nummer</td><td><b>${esc(extracted.invoiceNumber ?? '—')}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">Datum</td><td><b>${esc(extracted.date ?? '—')}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">Netto</td><td><b>${esc(fmt(extracted.net, extracted.currency))}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">MwSt</td><td><b>${esc(fmt(extracted.vat, extracted.currency))}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">MwSt-Satz</td><td><b>${esc(extracted.vatRate != null ? extracted.vatRate + '%' : '—')}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">Brutto</td><td><b>${esc(fmt(extracted.gross, extracted.currency))}</b></td></tr>
+  </table>
+  <h4 style="margin:12px 0 6px 0;font-size:15px">Volltext (bereinigt)</h4>
+  <pre style="white-space:pre-wrap;word-wrap:break-word;background:#fafafa;border:1px solid #eee;padding:8px;border-radius:8px">${esc(cleanedOcr)}</pre>`;
 
-  const body =
-`DE
-${summaryDe}
+  const en = `
+  <h3 style="margin:16px 0 8px 0;font-size:16px">Invoice summary</h3>
+  <table cellspacing="0" cellpadding="0" style="border-collapse:collapse">
+    <tr><td style="padding:2px 8px 2px 0">Number</td><td><b>${esc(extracted.invoiceNumber ?? '—')}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">Date</td><td><b>${esc(extracted.date ?? '—')}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">Net</td><td><b>${esc(fmt(extracted.net, extracted.currency))}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">VAT</td><td><b>${esc(fmt(extracted.vat, extracted.currency))}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">VAT rate</td><td><b>${esc(extracted.vatRate != null ? extracted.vatRate + '%' : '—')}</b></td></tr>
+    <tr><td style="padding:2px 8px 2px 0">Gross</td><td><b>${esc(fmt(extracted.gross, extracted.currency))}</b></td></tr>
+  </table>
+  <h4 style="margin:12px 0 6px 0;font-size:15px">Full text (cleaned)</h4>
+  <pre style="white-space:pre-wrap;word-wrap:break-word;background:#fafafa;border:1px solid #eee;padding:8px;border-radius:8px">${esc(cleanedOcr)}</pre>`;
 
-— Volltext (bereinigt) —
-${cleanedOcr}
-
----
-EN
-${summaryEn}
-
-— Full text (cleaned) —
-${cleanedOcr}`;
-
-  // harte Längenbremse gegen überlange OCRs
-  const MAX = 15000;
-  return body.length > MAX ? body.slice(0, MAX) : body;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222">${de}<hr style="margin:16px 0;border:none;border-top:1px solid #eee" />${en}</div>`;
 }
 
-// Strenger Prompt: nur das JSON im bekannten Schema zurückgeben
+// RFC 2045 quoted-printable Encoder (UTF-8), 76 Zeichen pro Zeile, Softbreak "="
+function encodeQuotedPrintable(str) {
+  const encoder = new TextEncoder(); // utf-8
+  const bytes = encoder.encode(str);
+  const safe = (b) => (b === 9 || b === 32 || (b >= 33 && b <= 60) || (b >= 62 && b <= 126)); // außer '='
+  const hex = (b) => b.toString(16).toUpperCase().padStart(2, '0');
+
+  let out = '';
+  let lineLen = 0;
+  const push = (s) => { out += s; lineLen += s.length; };
+
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    let token;
+
+    if (b === 61 /* '=' */ || !safe(b)) token = '=' + hex(b);
+    else token = String.fromCharCode(b);
+
+    // Zeilenende muss Softbreak, wenn > 76
+    if (lineLen + token.length > 75) { // 75, damit wir '=' + CRLF noch passen
+      out += '=\r\n';
+      lineLen = 0;
+    }
+
+    push(token);
+
+    // harte Zeilenumbrüche im Input erhalten
+    if (token === '\n') lineLen = 0;
+  }
+
+  // Space/Tab am Zeilenende müssen quoted werden
+  out = out.replace(/[\t ](?=\r?\n)/g, (m) => '=' + hex(m.charCodeAt(0)));
+
+  // CRLF normalisieren
+  out = out.replace(/\r?\n/g, '\r\n');
+
+  return out;
+}
+
+function buildRfc5322Body(html, charset = 'utf-8') {
+  const qp = encodeQuotedPrintable(html);
+  const headers =
+    `Content-Transfer-Encoding: quoted-printable\r\n` +
+    `Content-Type: text/html; charset=${charset}\r\n` +
+    `Mime-Version: 1.0\r\n\r\n`;
+  return headers + qp;
+}
+
+/* ---------- Bilingual Mail + strikter Prompt ---------- */
 async function sendStructuredEmail(extracted, cleanedOcr) {
-  const body = buildBilingualEmailBody(extracted, cleanedOcr);
+  const html = buildBilingualEmailHTML(extracted, cleanedOcr);
+  // harte Bremse gegen Mega-Mails
+  const htmlMax = html.length > 200000 ? html.slice(0, 200000) : html;
+
+  // UTF-8, damit € sicher durchkommt
+  const rawEmailBody = buildRfc5322Body(htmlMax, 'utf-8');
+
   const envelope = {
     action: 'email',
-    subject: 'your rabbit receipt scan',
-    body
+    subject: 'your Rabbit Rece1pt Scan',
+    body: rawEmailBody
   };
-  const ultraStrictPrompt =
-    'You are an assistant. Please email the receipt text below to the recipient. Return ONLY the following JSON. No markdown, no code fences, no commentary:\n' +
-    JSON.stringify(envelope);
 
-  const payload = {
-    useLLM: true,
-    message: ultraStrictPrompt,
-    imageDataUrl: capturedImageData // optionaler Anhang
-  };
+const prompt =
+  'You are an assistant. Please email the receipt text below to the recipient.\n' +
+  'Return ONLY valid JSON. No markdown, no code fences, no commentary, no extra fields.\n' +
+  'Output MUST be EXACTLY this JSON object (do not modify keys or values):\n' +
+  JSON.stringify(envelope);
+
+const payload = {
+  useLLM: true,
+  message: prompt,
+  imageDataUrl: capturedImageData
+};
 
   if (typeof PluginMessageHandler !== 'undefined') {
     PluginMessageHandler.postMessage(JSON.stringify(payload));
@@ -462,7 +512,7 @@ async function captureAndScan() {
       // UI: strukturierte Daten
       result.innerHTML += '<br><br>' + renderInvoiceExtraction(extracted);
 
-      // Mail absenden (DE + EN im Body)
+      // Mail absenden (DE + EN, HTML, quoted-printable, UTF-8)
       await sendStructuredEmail(extracted, cleanedOcr);
     } else {
       result.innerHTML = '⚠️ Kein Text erkannt. Bitte erneut versuchen. Achte auf Licht und Fokus.';
