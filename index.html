@@ -1,231 +1,208 @@
-/* Rabbit Receipt Scanner - Jens Special Edition */
-// Initialize Tesseract
-const { createWorker } = Tesseract;
-let worker = null;
-let stream = null;
-let capturedImageData = null;
-
-// DOM elements
-const scanButton = document.getElementById('scanButton');
-const captureButton = document.getElementById('captureButton');
-const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
-const overlay = document.getElementById('overlay');
-const thinkingOverlay = document.getElementById('thinking-overlay');
-const statusText = document.getElementById('status-text');
-const result = document.getElementById('result');
-
-// Initialize the OCR worker with slow, precise settings
-async function initializeOCR() {
-    try {
-        statusText.textContent = 'Initialisiere OCR-Engine...';
-        showThinkingOverlay();
-        
-        worker = await createWorker();
-        
-        statusText.textContent = 'Lade deutsche Sprache...';
-        await worker.loadLanguage('deu');
-        
-        statusText.textContent = 'Konfiguriere OCR...';
-        await worker.initialize('deu');
-        
-        // Set parameters for slow, precise OCR with better accuracy
-        await worker.setParameters({
-            tessedit_ocr_engine_mode: '1', // Use LSTM engine (best accuracy)
-            tessedit_pageseg_mode: '6', // Assume a single uniform block of text
-            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzäöüÄÖÜß€.,:-/()* ',
-            // Quality/speed settings - prioritize accuracy over speed
-            tessedit_do_invert: '0',
-            edges_use_new_outline_complexity: '1',
-            textord_heavy_nr: '1',
-            // Additional precision settings
-            tessedit_enable_dict_correction: '1',
-            classify_enable_adaptive_matcher: '1',
-            classify_enable_learning: '1'
-        });
-        
-        hideThinkingOverlay();
-        console.log('[OCR] Worker initialized successfully with slow precise mode');
-    } catch (error) {
-        console.error('[OCR] Failed to initialize:', error);
-        hideThinkingOverlay();
-        result.innerHTML = '❌ OCR Initialisierung fehlgeschlagen';
-        result.style.display = 'block';
-        result.classList.add('has-content');
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=240, initial-scale=1.0, viewport-fit=cover">
+  <title>Rabbit Receipt Scanner - Jens Special</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 240px;
+      height: 260px;
+      max-width: 240px;
+      max-height: 260px;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      position: fixed;
+      top: 0;
+      left: 0;
     }
-}
-
-function showThinkingOverlay() {
-    thinkingOverlay.style.display = 'flex';
-}
-
-function hideThinkingOverlay() {
-    thinkingOverlay.style.display = 'none';
-}
-
-async function startCamera() {
-    try {
-        console.log('[Camera] Starting camera...');
-        scanButton.style.display = 'none';
-        
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: 'environment',
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
-            }
-        });
-        
-        video.srcObject = stream;
-        video.style.display = 'block';
-        captureButton.style.display = 'block';
-        
-        console.log('[Camera] Camera started successfully');
-    } catch (error) {
-        console.error('[Camera] Failed to start:', error);
-        alert('Kamerazugriff fehlgeschlagen. Bitte überprüfen Sie die Berechtigungen.');
-        scanButton.style.display = 'block';
+    * {
+      box-sizing: border-box;
+      overflow: hidden;
     }
-}
-
-function stopCamera() {
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        video.style.display = 'none';
-        captureButton.style.display = 'none';
-        console.log('[Camera] Camera stopped');
+    .header {
+      background: linear-gradient(180deg, #ff8800 0%, #ff6600 100%);
+      color: #fff;
+      height: 45px;
+      min-height: 45px;
+      max-height: 45px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 0 10px;
+      gap: 8px;
+      flex-shrink: 0;
     }
-}
-
-// Function to send OCR text via LLM API (no image attachment)
-async function sendOCRTextViaLLM(ocrText) {
-    try {
-        console.log('[Email] Attempting to send OCR text via Rabbit LLM...');
-        statusText.textContent = 'Versand OCR-Text per LLM...';
-        showThinkingOverlay();
-        
-        const prompt = `Bitte sende das folgende OCR-Ergebnis als Text per E-Mail an mich selbst. Schicke keine Bilder, sondern nur den extrahierten Text im Mailbody. Hier ist der Text:\n\n${ocrText}`;
-        
-        const payload = {
-            action: 'email',
-            subject: 'OCR Text Result',
-            body: prompt
-            // No attachments - only plain text
-        };
-        
-        // Try rabbit.llm.sendMailToSelf if available
-        if (typeof rabbit !== 'undefined' && rabbit.llm && rabbit.llm.sendMailToSelf) {
-            await rabbit.llm.sendMailToSelf(payload);
-            console.log('[Email] Sent successfully via rabbit.llm.sendMailToSelf');
-        }
-        // Try PluginMessageHandler if available
-        else if (typeof PluginMessageHandler !== 'undefined') {
-            await PluginMessageHandler.postMessage(JSON.stringify(payload));
-            console.log('[Email] Sent successfully via PluginMessageHandler');
-        }
-        // Fallback: log to console
-        else {
-            console.warn('[Email] No LLM API available, payload:', payload);
-            throw new Error('LLM API nicht verfügbar');
-        }
-        
-        hideThinkingOverlay();
-        statusText.textContent = 'OCR-Text versandt!';
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        statusText.textContent = '';
-        
-    } catch (error) {
-        console.error('[Email] Failed to send OCR text:', error);
-        hideThinkingOverlay();
-        statusText.textContent = 'Versand fehlgeschlagen: ' + error.message;
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        statusText.textContent = '';
+    .header img {
+      height: 28px;
+      width: 28px;
+      object-fit: contain;
+      flex-shrink: 0;
     }
-}
-
-async function captureAndScan() {
-    try {
-        console.log('[Capture] Taking snapshot...');
-        
-        const context = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        capturedImageData = canvas.toDataURL('image/jpeg', 0.95);
-        
-        // No image display in overlay - just hide it
-        overlay.style.display = 'none';
-        
-        stopCamera();
-        
-        console.log('[Capture] Snapshot taken, starting OCR...');
-        
-        statusText.textContent = 'Bereite OCR vor...';
-        showThinkingOverlay();
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        statusText.textContent = 'Analysiere Text... bitte warten';
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        statusText.textContent = 'OCR läuft... dies kann einen Moment dauern';
-        
-        const { data: { text, confidence } } = await worker.recognize(capturedImageData);
-        
-        // Give time for processing to feel thorough
-        statusText.textContent = 'Optimiere Ergebnis...';
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Hide thinking overlay after OCR completes
-        hideThinkingOverlay();
-        
-        // Display ONLY plain text result in the result div (no image preview)
-        if (text && text.trim().length > 0) {
-            result.innerHTML = `✓ OCR Ergebnis (nur Text):<br><br>${text.replace(/\n/g, '<br>')}`;
-        } else {
-            result.innerHTML = '⚠️ Kein Text erkannt. Bitte versuchen Sie es erneut mit besserem Licht und Fokus.';
-        }
-        result.classList.add('has-content');
-        result.style.display = 'block';
-        
-        // Show scan button again
-        scanButton.style.display = 'block';
-        scanButton.classList.remove('hidden');
-        scanButton.textContent = 'Erneut scannen';
-        
-        console.log('[OCR] Result:', text);
-        console.log('[OCR] Confidence:', confidence);
-        
-        // Auto-send OCR text (no image) via LLM after successful OCR
-        if (text && text.trim().length > 0) {
-            await sendOCRTextViaLLM(text);
-        }
-        
-    } catch (error) {
-        console.error('[OCR] Recognition failed:', error);
-        hideThinkingOverlay();
-        
-        // Display error in result div
-        result.innerHTML = '❌ OCR fehlgeschlagen. Bitte versuchen Sie es erneut.';
-        result.style.display = 'block';
-        result.classList.add('has-content');
-        
-        overlay.style.display = 'none';
-        stopCamera();
-        scanButton.style.display = 'block';
-        scanButton.classList.remove('hidden');
+    .content {
+      height: 215px;
+      min-height: 215px;
+      max-height: 215px;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      overflow: hidden;
     }
-}
-
-// Event listeners
-scanButton.addEventListener('click', () => {
-    result.innerHTML = '';
-    result.style.display = 'none';
-    result.classList.remove('has-content');
-    startCamera();
-});
-
-captureButton.addEventListener('click', captureAndScan);
-
-// Initialize OCR on page load
-initializeOCR();
+    #video {
+      width: 100%;
+      height: 100%;
+      border: 2px solid #ff8800;
+      border-radius: 12px;
+      background: #000;
+      object-fit: cover;
+      display: none;
+    }
+    #video.active {
+      display: block;
+    }
+    #scanButton {
+      background: linear-gradient(180deg, #ff8800 0%, #ff6600 100%);
+      color: white;
+      border: none;
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 4px 12px rgba(255, 136, 0, 0.3);
+      flex-shrink: 0;
+    }
+    #scanButton:hover {
+      background: linear-gradient(180deg, #ff9900 0%, #ff7700 100%);
+    }
+    #captureButton {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60px;
+      height: 60px;
+      border: 3px solid #ff8800;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.7);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(255, 136, 0, 0.4);
+      z-index: 10;
+      padding: 0;
+    }
+    #captureButton.active {
+      display: flex;
+    }
+    #captureButton img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+    }
+    #captureButton:hover {
+      background: rgba(255, 136, 0, 0.2);
+      border-color: #ff9900;
+    }
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: 2px solid #ff8800;
+      border-radius: 12px;
+      pointer-events: none;
+      display: none;
+    }
+    .overlay.active {
+      display: block;
+    }
+    #thinking-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 240px;
+      height: 260px;
+      background: rgba(0, 0, 0, 0.95);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      gap: 15px;
+    }
+    #thinking-overlay.active {
+      display: flex;
+    }
+    #thinking-overlay img {
+      width: 80px;
+      height: 80px;
+      object-fit: contain;
+    }
+    #thinking-overlay .status-text {
+      color: #ff8800;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      padding: 0 20px;
+      line-height: 1.4;
+    }
+    #result {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+      border: 2px solid #ff8800;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 11px;
+      line-height: 1.3;
+      overflow: hidden;
+      max-height: 160px;
+      width: 220px;
+      margin: 10px auto;
+      box-sizing: border-box;
+      flex-shrink: 0;
+      color: #fff;
+      font-weight: 500;
+    }
+    #result.has-content {
+      box-shadow: 0 0 20px rgba(255, 136, 0, 0.3);
+    }
+    .loading {
+      font-size: 13px;
+      color: #ff8800;
+      font-weight: 600;
+    }
+    #canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/r1-cam.png?raw=true" alt="R1 Logo">
+    Receipt Scanner
+  </div>
+  <div class="content">
+    <button id="scanButton">Scan starten</button>
+    <video id="video" autoplay playsinline></video>
+    <button id="captureButton"><img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/r1-cam.png?raw=true" alt="Capture"></button>
+    <div id="overlay" class="overlay"></div>
+    <div id="thinking-overlay">
+      <img src="https://github.com/atomlabor/rabbit-receipt-scanner/blob/main/rabbit-thinking.gif?raw=true" alt="Processing...">
+      <div id="status-text" class="status-text">Analysiere... bitte warten</div>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div id="result"></div>
+  </div>
+  <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
