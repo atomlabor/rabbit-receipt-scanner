@@ -1,5 +1,4 @@
 /* Rabbit Receipt Scanner - Jens Special Edition */
-
 // Initialize Tesseract
 const { createWorker } = Tesseract;
 let worker = null;
@@ -56,149 +55,116 @@ async function initializeOCR() {
     }
 }
 
-// Set overlay message
-function setOverlay(message) {
-    overlay.innerHTML = `<div class="loading">${message}</div>`;
-}
-
-// Show thinking overlay with status
 function showThinkingOverlay() {
-    thinkingOverlay.classList.add('active');
+    thinkingOverlay.style.display = 'flex';
 }
 
-// Hide thinking overlay
 function hideThinkingOverlay() {
-    thinkingOverlay.classList.remove('active');
+    thinkingOverlay.style.display = 'none';
 }
 
-// Start camera
 async function startCamera() {
     try {
-        setOverlay('Kamera wird gestartet...');
+        console.log('[Camera] Starting camera...');
+        scanButton.style.display = 'none';
         
-        // Request camera with higher resolution for better OCR
-        stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: {
                 facingMode: 'environment',
                 width: { ideal: 1920 },
                 height: { ideal: 1080 }
-            } 
+            }
         });
         
         video.srcObject = stream;
-        video.classList.add('active');
-        captureButton.classList.add('active');
-        scanButton.classList.add('hidden');
-        overlay.innerHTML = '';
+        video.style.display = 'block';
+        captureButton.style.display = 'block';
         
-        console.log('[Camera] Started successfully');
+        console.log('[Camera] Camera started successfully');
     } catch (error) {
         console.error('[Camera] Failed to start:', error);
-        setOverlay('Kamera-Zugriff fehlgeschlagen');
-        result.innerHTML = '❌ Kamera-Zugriff fehlgeschlagen. Bitte Berechtigungen prüfen.';
-        result.style.display = 'block';
-        result.classList.add('has-content');
+        alert('Kamerazugriff fehlgeschlagen. Bitte überprüfen Sie die Berechtigungen.');
+        scanButton.style.display = 'block';
     }
 }
 
-// Stop camera
 function stopCamera() {
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
-        stream = null;
+        video.style.display = 'none';
+        captureButton.style.display = 'none';
+        console.log('[Camera] Camera stopped');
     }
-    video.classList.remove('active');
-    captureButton.classList.remove('hidden');
-    captureButton.classList.remove('active');
-    console.log('[Camera] Stopped');
 }
 
-// Advanced image preprocessing for better OCR accuracy
-function preprocessImage(canvas) {
-    const context = canvas.getContext('2d');
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    
-    // Step 1: Convert to grayscale
-    for (let i = 0; i < data.length; i += 4) {
-        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        data[i] = gray;
-        data[i + 1] = gray;
-        data[i + 2] = gray;
-    }
-    
-    // Step 2: Calculate adaptive threshold (slower but more accurate)
-    const blockSize = 25;
-    const C = 10;
-    const tempData = new Uint8ClampedArray(data.length);
-    
-    for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-            const idx = (y * canvas.width + x) * 4;
-            
-            // Calculate local mean
-            let sum = 0;
-            let count = 0;
-            for (let by = Math.max(0, y - blockSize); by < Math.min(canvas.height, y + blockSize); by++) {
-                for (let bx = Math.max(0, x - blockSize); bx < Math.min(canvas.width, x + blockSize); bx++) {
-                    sum += data[(by * canvas.width + bx) * 4];
-                    count++;
-                }
-            }
-            const localMean = sum / count;
-            
-            // Apply threshold
-            const threshold = localMean - C;
-            const value = data[idx] > threshold ? 255 : 0;
-            tempData[idx] = value;
-            tempData[idx + 1] = value;
-            tempData[idx + 2] = value;
-            tempData[idx + 3] = 255;
-        }
-    }
-    
-    // Copy processed data back
-    for (let i = 0; i < data.length; i++) {
-        data[i] = tempData[i];
-    }
-    
-    context.putImageData(imageData, 0, 0);
-}
-
-// Capture and scan with slow, precise OCR
-async function captureAndScan() {
-    if (!worker) {
-        result.innerHTML = '❌ OCR nicht bereit. Bitte warten Sie, bis die Initialisierung abgeschlossen ist.';
-        result.style.display = 'block';
-        result.classList.add('has-content');
-        return;
-    }
-    
+// Function to send email via LLM API
+async function sendEmailViaLLM(ocrText, imageDataUrl) {
     try {
-        // Show thinking overlay immediately
-        statusText.textContent = 'Erfasse Bild...';
+        console.log('[Email] Attempting to send via Rabbit LLM...');
+        statusText.textContent = 'Sende per Rabbit LLM...';
         showThinkingOverlay();
         
-        // Small delay to show status
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const payload = {
+            action: 'email',
+            subject: 'Scanned Receipt',
+            body: ocrText,
+            attachments: [{
+                dataUrl: imageDataUrl
+            }]
+        };
         
-        // Capture image from video
+        // Try rabbit.llm.sendMailToSelf if available
+        if (typeof rabbit !== 'undefined' && rabbit.llm && rabbit.llm.sendMailToSelf) {
+            await rabbit.llm.sendMailToSelf(payload);
+            console.log('[Email] Sent successfully via rabbit.llm.sendMailToSelf');
+        }
+        // Try PluginMessageHandler if available
+        else if (typeof PluginMessageHandler !== 'undefined') {
+            await PluginMessageHandler.postMessage(JSON.stringify(payload));
+            console.log('[Email] Sent successfully via PluginMessageHandler');
+        }
+        // Fallback: log to console
+        else {
+            console.warn('[Email] No LLM API available, payload:', payload);
+            throw new Error('LLM API nicht verfügbar');
+        }
+        
+        hideThinkingOverlay();
+        statusText.textContent = 'Versandt!';
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        statusText.textContent = '';
+        
+    } catch (error) {
+        console.error('[Email] Failed to send:', error);
+        hideThinkingOverlay();
+        statusText.textContent = 'Versand fehlgeschlagen: ' + error.message;
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        statusText.textContent = '';
+    }
+}
+
+async function captureAndScan() {
+    try {
+        console.log('[Capture] Taking snapshot...');
+        
         const context = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Preprocess image for better OCR
-        statusText.textContent = 'Bereite Bild vor...';
-        await new Promise(resolve => setTimeout(resolve, 300));
-        preprocessImage(canvas);
+        capturedImageData = canvas.toDataURL('image/jpeg', 0.95);
         
-        capturedImageData = canvas.toDataURL('image/png');
+        overlay.style.backgroundImage = `url(${capturedImageData})`;
+        overlay.style.display = 'block';
         
-        // Stop camera
         stopCamera();
         
-        // Perform OCR with progress updates
+        console.log('[Capture] Snapshot taken, starting OCR...');
+        
+        statusText.textContent = 'Bereite OCR vor...';
+        showThinkingOverlay();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
         statusText.textContent = 'Analysiere Text... bitte warten';
         await new Promise(resolve => setTimeout(resolve, 300));
         
@@ -216,7 +182,7 @@ async function captureAndScan() {
         // Display result in the result div
         overlay.innerHTML = '';
         if (text && text.trim().length > 0) {
-            result.innerHTML = `<strong>✓ OCR Ergebnis:</strong><br><br>${text.replace(/\n/g, '<br>')}`;
+            result.innerHTML = `✓ OCR Ergebnis:<br><br>${text.replace(/\n/g, '<br>')}`;
         } else {
             result.innerHTML = '⚠️ Kein Text erkannt. Bitte versuchen Sie es erneut mit besserem Licht und Fokus.';
         }
@@ -230,6 +196,12 @@ async function captureAndScan() {
         
         console.log('[OCR] Result:', text);
         console.log('[OCR] Confidence:', confidence);
+        
+        // Auto-send email via LLM after successful OCR
+        if (text && text.trim().length > 0) {
+            await sendEmailViaLLM(text, capturedImageData);
+        }
+        
     } catch (error) {
         console.error('[OCR] Recognition failed:', error);
         hideThinkingOverlay();
