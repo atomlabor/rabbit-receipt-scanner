@@ -21,17 +21,14 @@ async function initializeOCR() {
         statusText.textContent = 'Initialisiere OCR-Engine...';
         showThinkingOverlay();
         
-        worker = await createWorker();
-        
-        statusText.textContent = 'Lade deutsche Sprache...';
-        await worker.loadLanguage('deu');
-        
-        statusText.textContent = 'Konfiguriere OCR...';
-        await worker.initialize('deu');
+        // Tesseract.js v5+: createWorker accepts language and options
+        // No need for loadLanguage() or initialize() - they're deprecated
+        worker = await createWorker('deu', 1, {
+            // OEM 1 = LSTM engine (best accuracy)
+        });
         
         // Set parameters for slow, precise OCR with better accuracy
         await worker.setParameters({
-            tessedit_ocr_engine_mode: '1', // Use LSTM engine (best accuracy)
             tessedit_pageseg_mode: '6', // Assume a single uniform block of text
             tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzäöüÄÖÜß€.,:-/()* ',
             // Quality/speed settings - prioritize accuracy over speed
