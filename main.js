@@ -21,14 +21,17 @@ async function initializeOCR() {
         statusText.textContent = 'Initialisiere OCR-Engine...';
         showThinkingOverlay();
         
-        // Tesseract.js v5+: createWorker accepts language and options
-        // No need for loadLanguage() or initialize() - they're deprecated
-        worker = await createWorker('deu', 1, {
-            // OEM 1 = LSTM engine (best accuracy)
-        });
+        worker = await createWorker();
+        
+        statusText.textContent = 'Lade deutsche Sprache...';
+        await worker.loadLanguage('deu');
+        
+        statusText.textContent = 'Konfiguriere OCR...';
+        await worker.initialize('deu');
         
         // Set parameters for slow, precise OCR with better accuracy
         await worker.setParameters({
+            tessedit_ocr_engine_mode: '1', // Use LSTM engine (best accuracy)
             tessedit_pageseg_mode: '6', // Assume a single uniform block of text
             tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzäöüÄÖÜß€.,:-/()* ',
             // Quality/speed settings - prioritize accuracy over speed
@@ -94,38 +97,47 @@ function stopCamera() {
     }
 }
 
-// Function to send OCR text via Rabbit LLM AI prompt
-async function sendOCRTextViaRabbitAI(ocrText) {
+// Function to send OCR text via LLM API (no image attachment)
+async function sendOCRTextViaLLM(ocrText) {
     try {
-        console.log('[Rabbit AI] Sending OCR text via Rabbit LLM prompt...');
-        statusText.textContent = 'An Rabbit KI übergeben...';
+        console.log('[Email] Attempting to send OCR text via Rabbit LLM...');
+        statusText.textContent = 'Versand OCR-Text per LLM...';
         showThinkingOverlay();
         
-        const prompt = `Du bist ein Assistent. Sende bitte den erkannten OCR-Beleginhalt als Mail an mich selbst. Rückgabe ausschließlich als gültiges JSON: {"action":"email","subject":"Rabbit Receipt Scan","body":"${ocrText.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"}`;
+        const prompt = `Bitte sende das folgende OCR-Ergebnis als Text per E-Mail an mich selbst. Schicke keine Bilder, sondern nur den extrahierten Text im Mailbody. Hier ist der Text:\n\n${ocrText}`;
         
         const payload = {
-            useLLM: true,
-            message: prompt
+            action: 'email',
+            subject: 'OCR Text Result',
+            body: prompt
+            // No attachments - only plain text
         };
         
-        // Send via PluginMessageHandler
-        if (typeof PluginMessageHandler !== 'undefined') {
-            PluginMessageHandler.postMessage(JSON.stringify(payload));
-            console.log('[Rabbit AI] Prompt sent successfully via PluginMessageHandler');
-        } else {
-            console.warn('[Rabbit AI] PluginMessageHandler not available, payload:', payload);
-            throw new Error('PluginMessageHandler nicht verfügbar');
+        // Try rabbit.llm.sendMailToSelf if available
+        if (typeof rabbit !== 'undefined' && rabbit.llm && rabbit.llm.sendMailToSelf) {
+            await rabbit.llm.sendMailToSelf(payload);
+            console.log('[Email] Sent successfully via rabbit.llm.sendMailToSelf');
+        }
+        // Try PluginMessageHandler if available
+        else if (typeof PluginMessageHandler !== 'undefined') {
+            await PluginMessageHandler.postMessage(JSON.stringify(payload));
+            console.log('[Email] Sent successfully via PluginMessageHandler');
+        }
+        // Fallback: log to console
+        else {
+            console.warn('[Email] No LLM API available, payload:', payload);
+            throw new Error('LLM API nicht verfügbar');
         }
         
         hideThinkingOverlay();
-        statusText.textContent = 'KI-Auftrag erteilt';
+        statusText.textContent = 'OCR-Text versandt!';
         await new Promise(resolve => setTimeout(resolve, 2000));
         statusText.textContent = '';
         
     } catch (error) {
-        console.error('[Rabbit AI] Failed to send prompt:', error);
+        console.error('[Email] Failed to send OCR text:', error);
         hideThinkingOverlay();
-        statusText.textContent = 'KI-Auftrag fehlgeschlagen: ' + error.message;
+        statusText.textContent = 'Versand fehlgeschlagen: ' + error.message;
         await new Promise(resolve => setTimeout(resolve, 3000));
         statusText.textContent = '';
     }
@@ -169,7 +181,7 @@ async function captureAndScan() {
         
         // Display ONLY plain text result in the result div (no image preview)
         if (text && text.trim().length > 0) {
-            result.innerHTML = `✓ OCR Ergebnis (nur Text):<br/><br/>${text.replace(/\n/g, '<br/>')}`;
+            result.innerHTML = `✓ OCR Ergebnis (nur Text):<br><br>${text.replace(/\n/g, '<br>')}`;
         } else {
             result.innerHTML = '⚠️ Kein Text erkannt. Bitte versuchen Sie es erneut mit besserem Licht und Fokus.';
         }
@@ -184,9 +196,9 @@ async function captureAndScan() {
         console.log('[OCR] Result:', text);
         console.log('[OCR] Confidence:', confidence);
         
-        // Auto-send OCR text via Rabbit AI prompt after successful OCR
+        // Auto-send OCR text (no image) via LLM after successful OCR
         if (text && text.trim().length > 0) {
-            await sendOCRTextViaRabbitAI(text);
+            await sendOCRTextViaLLM(text);
         }
         
     } catch (error) {
