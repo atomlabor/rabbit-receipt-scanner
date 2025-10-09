@@ -389,28 +389,63 @@ function buildRfc5322Body(html, charset = 'utf-8') {
 
 /* ---------- Mail + strikter Prompt ---------- */
 async function sendStructuredEmail(extracted, cleanedOcr) {
-  // 1) Sauberes HTML für die Mail
+  // HTML bauen (de + en) – Funktion hast du schon
   const html = buildBilingualEmailHTML(extracted, cleanedOcr);
-  const htmlMax = html.length > 200000 ? html.slice(0, 200000) : html;
+  const bodyHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${html}</body></html>`;
 
+  // Plain-Text für Fallback / Clients ohne HTML
+  const bodyText =
+`DE
+Rechnungszusammenfassung
+Nummer: ${extracted.invoiceNumber ?? '—'}
+Datum: ${extracted.date ?? '—'}
+Netto: ${extracted.net != null ? extracted.net.toFixed(2) : '—'} ${extracted.currency}
+MwSt: ${extracted.vat != null ? extracted.vat.toFixed(2) : '—'} ${extracted.currency}
+MwSt-Satz: ${extracted.vatRate != null ? extracted.vatRate + '%' : '—'}
+Brutto: ${extracted.gross != null ? extracted.gross.toFixed(2) : '—'} ${extracted.currency}
 
+— Volltext (bereinigt) —
+${cleanedOcr}
+
+---
+EN
+Invoice summary
+Number: ${extracted.invoiceNumber ?? '—'}
+Date: ${extracted.date ?? '—'}
+Net: ${extracted.net != null ? extracted.net.toFixed(2) : '—'} ${extracted.currency}
+VAT: ${extracted.vat != null ? extracted.vat.toFixed(2) : '—'} ${extracted.currency}
+VAT rate: ${extracted.vatRate != null ? extracted.vatRate + '%' : '—'}
+Gross: ${extracted.gross != null ? extracted.gross.toFixed(2) : '—'} ${extracted.currency}
+
+— Full text (cleaned) —
+${cleanedOcr}`;
+
+  // ENV: robustes Envelope mit Feldern, die viele Gateways verstehen
   const envelope = {
     action: 'email',
-    subject: 'your rabbit rece1pt scan',
-    body: `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${htmlMax}</body></html>`
+    subject: 'Rabbit Receipt Scan | Rechnungs-Scan',
+    // **WICHTIG**: getrennte Felder, KEINE Header im Body, KEIN quoted-printable
+    body_html: bodyHtml,
+    body_text: bodyText,
+    content_type: 'text/html; charset=utf-8', // Hint für Gateway
+    format: 'html',                           // zusätzliche Hints (werden ignoriert, wenn unbekannt)
+    isHtml: true
   };
 
-
+  // Strenger, aber kompatibler Prompt: dein Auftrag + harte Ausgaberegeln
   const prompt =
     'You are an assistant. Please email the receipt text below to the recipient.\n' +
-    'Return ONLY valid JSON. No markdown, no code fences, no commentary, no extra fields.\n' +
-    'Output MUST be EXACTLY this JSON object (do not modify keys or values):\n' +
+    'Return ONLY valid JSON. No markdown, no code fences, no commentary.\n' +
+    'Do NOT include MIME headers or transfer encoding inside any body field.\n' +
+    'Do NOT quoted-printable-encode anything; provide raw UTF-8.\n' +
+    'Use this exact schema: {"action":"email","subject":"string","body_html":"string","body_text":"string","content_type":"string","format":"string","isHtml":true}\n' +
+    'Output MUST be EXACTLY this JSON object (do not change keys or values):\n' +
     JSON.stringify(envelope);
 
   const payload = {
     useLLM: true,
     message: prompt,
-    imageDataUrl: capturedImageData // optional: Bild als Anhang
+    imageDataUrl: capturedImageData // optional: Bild anhängen, wenn dein Gateway das nutzt
   };
 
   if (typeof PluginMessageHandler !== 'undefined') {
@@ -420,6 +455,7 @@ async function sendStructuredEmail(extracted, cleanedOcr) {
     throw new Error('Plugin API nicht verfügbar');
   }
 }
+
 
 
 /* ---------- Capture + OCR Pipeline ---------- */
