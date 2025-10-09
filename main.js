@@ -123,7 +123,7 @@ async function initializeOCR() {
   }
 }
 
-/* ---------- Invoice Extraction Helpers ---------- */
+/* ---------- Invoice Extraction + Cleaning ---------- */
 const CURRENCY_MAP = { '€': 'EUR', 'EUR': 'EUR', '$': 'USD', 'USD': 'USD', '£': 'GBP', 'GBP': 'GBP', 'CHF': 'CHF' };
 
 function parseAmount(raw) {
@@ -288,52 +288,87 @@ function renderInvoiceExtraction(data) {
   </div>`;
 }
 
-function buildInvoiceSummary(ex) {
-  return `
-Invoice summary:
-- Number: ${ex.invoiceNumber ?? '-'}
-- Date: ${ex.date ?? '-'}
-- Net: ${ex.net != null ? ex.net.toFixed(2) : '-'} ${ex.currency}
-- VAT: ${ex.vat != null ? ex.vat.toFixed(2) : '-'} ${ex.currency}
-- VAT rate: ${ex.vatRate != null ? ex.vatRate + '%' : '-'}
-- Gross: ${ex.gross != null ? ex.gross.toFixed(2) : '-'} ${ex.currency}
-`.trim();
+// OCR-Text säubern (gegen Artefakte und Kraut)
+function cleanOcrText(raw) {
+  if (!raw) return '';
+  return raw
+    .replace(/\u0000/g, '')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/[|]{2,}/g, ' ')
+    .replace(/[_`~^]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\p{P}\p{Z}\r\n€$£%]/gu, '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length >= 2 && /[A-Za-zÄÖÜäöüß0-9]/.test(l))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
-/* ---------- LLM Email ---------- */
-async function sendOCRTextViaLLM(emailBody) {
-  try {
-    console.log('[Email] Attempting to send OCR text via Rabbit LLM...');
-    statusText.textContent = 'Versende OCR-Text...';
-    showThinkingOverlay();
+/* ---------- Bilingual Mail-Build + strikter Prompt ---------- */
+function buildBilingualEmailBody(extracted, cleanedOcr) {
+  const summaryEn = [
+    'Invoice summary',
+    `- Number: ${extracted.invoiceNumber ?? '-'}`,
+    `- Date: ${extracted.date ?? '-'}`,
+    `- Net: ${extracted.net != null ? extracted.net.toFixed(2) : '-'} ${extracted.currency}`,
+    `- VAT: ${extracted.vat != null ? extracted.vat.toFixed(2) : '-'} ${extracted.currency}`,
+    `- VAT rate: ${extracted.vatRate != null ? extracted.vatRate + '%' : '-'}`,
+    `- Gross: ${extracted.gross != null ? extracted.gross.toFixed(2) : '-'} ${extracted.currency}`
+  ].join('\n');
 
-    const prompt = `You are an assistant. Please email the receipt text below to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","subject":"Rabbit Receipt Scan","body":"${emailBody
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')}"}`;
+  const summaryDe = [
+    'Rechnungszusammenfassung',
+    `Nummer: ${extracted.invoiceNumber ?? '-'}`,
+    `Datum: ${extracted.date ?? '-'}`,
+    `Netto: ${extracted.net != null ? extracted.net.toFixed(2) : '-'} ${extracted.currency}`,
+    `MwSt: ${extracted.vat != null ? extracted.vat.toFixed(2) : '-'} ${extracted.currency}`,
+    `MwSt-Satz: ${extracted.vatRate != null ? extracted.vatRate + '%' : '-'}`,
+    `Brutto: ${extracted.gross != null ? extracted.gross.toFixed(2) : '-'} ${extracted.currency}`
+  ].join('\n');
 
-    const payload = {
-      useLLM: true,
-      message: prompt,
-      imageDataUrl: capturedImageData
-    };
+  const body =
+`DE
+${summaryDe}
 
-    if (typeof PluginMessageHandler !== 'undefined') {
-      PluginMessageHandler.postMessage(JSON.stringify(payload));
-      console.log('[Email] Sent to AI via PluginMessageHandler');
-      hideThinkingOverlay();
-      statusText.textContent = 'Gesendet...';
-      await new Promise(r => setTimeout(r, 1500));
-      statusText.textContent = '';
-    } else {
-      console.warn('[Email] PluginMessageHandler not available, payload:', payload);
-      throw new Error('Plugin API nicht verfügbar');
-    }
-  } catch (error) {
-    console.error('[Email] Failed to send OCR text:', error);
-    hideThinkingOverlay();
-    statusText.textContent = 'Versand fehlgeschlagen: ' + error.message;
-    await new Promise(r => setTimeout(r, 2500));
-    statusText.textContent = '';
+— Volltext (bereinigt) —
+${cleanedOcr}
+
+---
+EN
+${summaryEn}
+
+— Full text (cleaned) —
+${cleanedOcr}`;
+
+  // harte Längenbremse gegen überlange OCRs
+  const MAX = 15000;
+  return body.length > MAX ? body.slice(0, MAX) : body;
+}
+
+// Strenger Prompt: nur das JSON im bekannten Schema zurückgeben
+async function sendStructuredEmail(extracted, cleanedOcr) {
+  const body = buildBilingualEmailBody(extracted, cleanedOcr);
+  const envelope = {
+    action: 'email',
+    subject: 'your rabbit receipt scan',
+    body
+  };
+  const ultraStrictPrompt =
+    'You are an assistant. Please email the receipt text below to the recipient. Return ONLY the following JSON. No markdown, no code fences, no commentary:\n' +
+    JSON.stringify(envelope);
+
+  const payload = {
+    useLLM: true,
+    message: ultraStrictPrompt,
+    imageDataUrl: capturedImageData // optionaler Anhang
+  };
+
+  if (typeof PluginMessageHandler !== 'undefined') {
+    PluginMessageHandler.postMessage(JSON.stringify(payload));
+    console.log('[Email] Sent to AI via PluginMessageHandler');
+  } else {
+    throw new Error('Plugin API nicht verfügbar');
   }
 }
 
@@ -375,7 +410,7 @@ async function captureAndScan() {
     // Fallback bei schwacher Confidence
     if (!text1.trim() || conf1 < 85) {
       console.log('[OCR] Low confidence or empty text, retrying with PSM 7 and DAWG on...');
-      statusText.textContent = 'Zweitversuch mit optimierten Parametern...';
+      statusText.textContent = 'Verarbeitung mit optimierten Parametern...';
 
       await worker.setParameters({
         tessedit_pageseg_mode: '7',
@@ -417,16 +452,18 @@ async function captureAndScan() {
     hideThinkingOverlay();
 
     if (finalText && finalText.trim().length > 0) {
+      // UI: OCR anzeigen
       result.innerHTML = `✓ OCR Ergebnis:<br><br>${finalText.replace(/\n/g, '<br>')}`;
 
-      // Extraktion und Anzeige
+      // Extraktion + Bereinigung
       const extracted = extractInvoiceData(finalText);
+      const cleanedOcr = cleanOcrText(finalText);
+
+      // UI: strukturierte Daten
       result.innerHTML += '<br><br>' + renderInvoiceExtraction(extracted);
 
-      // Mailtext bauen: Summary plus Volltext
-      const summaryForMail = buildInvoiceSummary(extracted);
-      const emailBody = summaryForMail + '\n\n---\n\n' + finalText;
-      await sendOCRTextViaLLM(emailBody);
+      // Mail absenden (DE + EN im Body)
+      await sendStructuredEmail(extracted, cleanedOcr);
     } else {
       result.innerHTML = '⚠️ Kein Text erkannt. Bitte erneut versuchen. Achte auf Licht und Fokus.';
     }
