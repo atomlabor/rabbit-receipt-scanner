@@ -97,42 +97,34 @@ function stopCamera() {
     }
 }
 
-// Function to send OCR text via LLM API (no image attachment)
+// Function to send OCR text via Rabbit LLM with prompt-based approach
 async function sendOCRTextViaLLM(ocrText) {
     try {
         console.log('[Email] Attempting to send OCR text via Rabbit LLM...');
         statusText.textContent = 'Versand OCR-Text per LLM...';
         showThinkingOverlay();
         
-        const prompt = `Bitte sende das folgende OCR-Ergebnis als Text per E-Mail an mich selbst. Schicke keine Bilder, sondern nur den extrahierten Text im Mailbody. Hier ist der Text:\n\n${ocrText}`;
+        // Create prompt with embedded OCR text
+        const prompt = `You are an assistant. Please email the receipt text below to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","subject":"Rabbit Receipt Scan","body":"${ocrText.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"}`;
         
         const payload = {
-            action: 'email',
-            subject: 'OCR Text Result',
-            body: prompt
-            // No attachments - only plain text
+            useLLM: true,
+            message: prompt,
+            imageDataUrl: capturedImageData // Optional: include image attachment
         };
         
-        // Try rabbit.llm.sendMailToSelf if available
-        if (typeof rabbit !== 'undefined' && rabbit.llm && rabbit.llm.sendMailToSelf) {
-            await rabbit.llm.sendMailToSelf(payload);
-            console.log('[Email] Sent successfully via rabbit.llm.sendMailToSelf');
+        // Send via PluginMessageHandler
+        if (typeof PluginMessageHandler !== 'undefined') {
+            PluginMessageHandler.postMessage(JSON.stringify(payload));
+            console.log('[Email] Sent to AI via PluginMessageHandler');
+            hideThinkingOverlay();
+            statusText.textContent = 'Sent to AI...';
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            statusText.textContent = '';
+        } else {
+            console.warn('[Email] PluginMessageHandler not available, payload:', payload);
+            throw new Error('Plugin API not available');
         }
-        // Try PluginMessageHandler if available
-        else if (typeof PluginMessageHandler !== 'undefined') {
-            await PluginMessageHandler.postMessage(JSON.stringify(payload));
-            console.log('[Email] Sent successfully via PluginMessageHandler');
-        }
-        // Fallback: log to console
-        else {
-            console.warn('[Email] No LLM API available, payload:', payload);
-            throw new Error('LLM API nicht verfügbar');
-        }
-        
-        hideThinkingOverlay();
-        statusText.textContent = 'OCR-Text versandt!';
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        statusText.textContent = '';
         
     } catch (error) {
         console.error('[Email] Failed to send OCR text:', error);
@@ -196,7 +188,7 @@ async function captureAndScan() {
         console.log('[OCR] Result:', text);
         console.log('[OCR] Confidence:', confidence);
         
-        // Auto-send OCR text (no image) via LLM after successful OCR
+        // Auto-send OCR text via Rabbit LLM after successful OCR
         if (text && text.trim().length > 0) {
             await sendOCRTextViaLLM(text);
         }
