@@ -432,9 +432,9 @@ ${cleanedOcr}`;
     isHtml: true
   };
 
-  // Strenger, aber kompatibler Prompt: dein Auftrag + harte Ausgaberegeln
   const prompt =
     'You are an assistant. Please email the receipt text below to the recipient.\n' +
+    'Analyse the content of the image and send me the exact result internally by email.\n' +
     'Return ONLY valid JSON. No markdown, no code fences, no commentary.\n' +
     'Do NOT include MIME headers or transfer encoding inside any body field.\n' +
     'Do NOT quoted-printable-encode anything; provide raw UTF-8.\n' +
