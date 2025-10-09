@@ -1,4 +1,4 @@
-/* Rabbit Receipt Scanner - Jens Special Edition */
+/* Rabbit Receipt Scanner */
 
 // Initialize Tesseract
 const { createWorker } = Tesseract;
