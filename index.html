@@ -84,7 +84,7 @@
       white-space: pre-wrap;
       word-break: break-word;
       color: #ccc;
-      max-height: 160px;
+      max-height: 120px;
       overflow: auto;
       resize: vertical;
     }
@@ -187,7 +187,8 @@
   </div>
   <div class="container">
     <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-      <p>📷 Klicke hier um Kassenbon zu scannen</p>
+      <img src="r1-cam.png" alt="📷" style="width: 32px; height: 32px; display: block; margin: 0 auto 8px;">
+      Klicke hier um Kassenbon zu scannen
       <input type="file" id="fileInput" accept="image/*" capture="environment">
     </div>
     <div id="status"></div>
@@ -197,123 +198,6 @@
   <div class="footer">
     Made with ❤️ by <a href="https://atomlabor.de" target="_blank">Atomlabor</a>
   </div>
-
-  <script>
-    document.getElementById('fileInput').addEventListener('change', handleFile);
-    
-    // Drag and drop functionality
-    const uploadArea = document.querySelector('.upload-area');
-    
-    uploadArea.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      uploadArea.classList.add('dragover');
-    });
-    
-    uploadArea.addEventListener('dragleave', () => {
-      uploadArea.classList.remove('dragover');
-    });
-    
-    uploadArea.addEventListener('drop', (e) => {
-      e.preventDefault();
-      uploadArea.classList.remove('dragover');
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        processFile(files[0]);
-      }
-    });
-    
-    function handleFile(event) {
-      const file = event.target.files[0];
-      if (file) {
-        processFile(file);
-      }
-    }
-    
-    async function processFile(file) {
-      const status = document.getElementById('status');
-      const result = document.getElementById('result');
-      
-      // Show loading state
-      status.innerHTML = '<span class="loading"></span>Analysiere Kassenbon...';
-      status.className = 'status info';
-      result.value = '';
-      
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch('/api/ocr', {
-          method: 'POST',
-          body: formData
-        });
-        
-        if (!response.ok) {
-          throw new Error('OCR-Verarbeitung fehlgeschlagen');
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          result.value = data.text;
-          status.innerHTML = '✅ Kassenbon erfolgreich analysiert!';
-          status.className = 'status success';
-        } else {
-          throw new Error(data.error || 'Unbekannter Fehler');
-        }
-        
-      } catch (error) {
-        console.error('Error:', error);
-        status.innerHTML = '❌ Fehler: ' + error.message;
-        status.className = 'status error';
-      }
-    }
-    
-    async function sendEmail() {
-      const result = document.getElementById('result');
-      const status = document.getElementById('status');
-      
-      if (!result.value.trim()) {
-        status.innerHTML = '❌ Bitte erst einen Kassenbon scannen!';
-        status.className = 'status error';
-        return;
-      }
-      
-      // Show loading state
-      status.innerHTML = '<span class="loading"></span>Sende Email...';
-      status.className = 'status info';
-      
-      try {
-        const response = await fetch('/api/email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            text: result.value
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error('Email-Versand fehlgeschlagen');
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          status.innerHTML = '✅ Email erfolgreich gesendet!';
-          status.className = 'status success';
-          // Clear the result after successful email
-          result.value = '';
-        } else {
-          throw new Error(data.error || 'Unbekannter Fehler');
-        }
-        
-      } catch (error) {
-        console.error('Error:', error);
-        status.innerHTML = '❌ Fehler beim Email-Versand: ' + error.message;
-        status.className = 'status error';
-      }
-    }
-  </script>
+  <script src="main.js"></script>
 </body>
 </html>
