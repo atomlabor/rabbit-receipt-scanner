@@ -580,7 +580,7 @@ scanButton.addEventListener('click', () => {
   result.innerHTML = '';
   result.style.display = 'none';
   result.classList.remove('has-content');
-  startCamera();
+  startCamera(); // startet die Kamera-Preview
 });
 
 captureButton.addEventListener('click', captureAndScan);
