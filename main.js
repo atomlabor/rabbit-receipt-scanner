@@ -170,11 +170,9 @@ function sendToAIWithEmbeddedDataUrl(toEmail, subject, body, dataUrl) {
   console.log('[AI] Preparing payload for PluginMessageHandler...', { toEmail, subjectLength: subject?.length, bodyLength: body?.length, hasImage: !!dataUrl });
 
   
-const prompt = `
-You are an assistant. Please email me the attached receipt image and OCR scan. 
-Return ONLY valid JSON in this exact format: 
-{"action":"email","to":"${toEmail}","subject":"Receipt Scan","body":"OCR Text:\\n${ocrText}\\n\\nExtracted Data:\\nVendor: ${invoiceData.vendor || 'N/A'}\\nDate: ${invoiceData.date || 'N/A'}\\nTotal: ${invoiceData.total || 'N/A'}\\nItems: ${invoiceData.items && invoiceData.items.length ? invoiceData.items.map(it => it.name + ' - ' + it.price).join('; ') : 'N/A'}","attachments":[{"dataUrl":"${dataUrl}"}]}
-`;
+const prompt = 'You are an assistant. Please email the receipt text below to the recipient. Return ONLY the following JSON. No markdown, no code fences, no commentary:\n' +
+    JSON.stringify(envelope);
+
 
  
   
