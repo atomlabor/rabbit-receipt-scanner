@@ -36,31 +36,25 @@ function setStatus(msg) {
 async function startCamera() {
   try {
     console.log('[Camera] Starting camera...');
-
     // Verify critical elements exist
     if (!video) {
       console.error('[Camera] Video element not found!');
       alert('Video element missing. Please reload the page.');
       return;
     }
-
     // Defensive clean-up before requesting a new stream
     try {
       if (video.srcObject) {
         video.srcObject.getTracks().forEach(t => t.stop());
       }
     } catch (_) { /* no-op */ }
-
     video.srcObject = null;
     scanButton.style.display = 'none';
-
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
-
     // Defensive camera initialization
     video.srcObject = stream;
-
     // Explicitly play the video - critical for preview to appear
     try {
       await video.play();
@@ -69,10 +63,8 @@ async function startCamera() {
       console.warn('[Camera] Video.play() failed, trying without await:', playError);
       video.play();
     }
-
     video.style.display = 'block';
     captureButton.style.display = 'block';
-
     console.log('[Camera] Camera started successfully, preview visible');
     console.log('[Camera] Video element state:', {
       srcObject: !!video.srcObject,
@@ -89,13 +81,13 @@ async function startCamera() {
     video.srcObject = null;
   }
 }
+
 function stopCamera() {
   try {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
   } catch (_) { /* no-op */ }
-
   // Defensive: clear video element regardless of stream existence
   if (video) {
     video.srcObject = null;
@@ -165,39 +157,49 @@ function renderInvoiceExtraction(data) {
   return html;
 }
 
-/* ---------- AI email routine (replaces Rabbit R1 rabbithole call) ---------- */
-function sendToAIWithEmbeddedDataUrl(toEmail, subject, body, dataUrl) {
-  console.log('[AI] Preparing payload for PluginMessageHandler...', { toEmail, subjectLength: subject?.length, bodyLength: body?.length, hasImage: !!dataUrl });
+/* ---------- AI email routine (Rabbit R1 conform) ---------- */
+function buildEnvelope(toEmail, subject, bodyObj, dataUrl) {
+  return {
+    to: toEmail || 'self',
+    subject,
+    body: bodyObj,
+    attachments: dataUrl ? [{ filename: 'receipt.jpg', contentType: 'image/jpeg', dataUrl }] : []
+  };
+}
 
-  
-const prompt = 'You are an assistant. Please email the receipt text below to the recipient. Return ONLY the following JSON. No markdown, no code fences, no commentary:\n' +
-    JSON.stringify(envelope);
-
-
- 
-  
+function sendToRabbitLLM(envelope) {
+  const minimalPrompt = `Return ONLY valid JSON in this exact format: ${JSON.stringify(envelope)}`;
   const payload = {
     useLLM: true,
-    message: prompt,
-    imageDataUrl: dataUrl
+    message: minimalPrompt,
+    imageDataUrl: envelope.attachments?.[0]?.dataUrl || null
   };
 
-  if (typeof PluginMessageHandler !== 'undefined') {
-    console.log('[AI] PluginMessageHandler available. Sending message...');
-    try {
+  try {
+    if (typeof PluginMessageHandler !== 'undefined' && PluginMessageHandler?.postMessage) {
+      console.log('[AI] Using PluginMessageHandler');
       PluginMessageHandler.postMessage(JSON.stringify(payload));
       setStatus('Sent to AI...');
-      console.log('[AI] ✓ Payload sent to AI via PluginMessageHandler');
-    } catch (err) {
-      console.error('[AI] ❌ Failed to post message to PluginMessageHandler:', err);
-      console.log('[AI] Payload (for debugging):', payload);
-      setStatus('Plugin postMessage failed');
+      return true;
     }
-  } else {
-    setStatus('Plugin API not available');
-    console.warn('[AI] PluginMessageHandler not available. Logging payload for debugging.');
-    console.log('Payload:', payload);
+  } catch (err) {
+    console.error('[AI] PluginMessageHandler failed:', err);
   }
+
+  try {
+    if (typeof sdk !== 'undefined' && sdk?.messaging?.sendMessage) {
+      console.log('[AI] Using sdk.messaging.sendMessage');
+      sdk.messaging.sendMessage(JSON.stringify(payload));
+      setStatus('Sent to AI via SDK...');
+      return true;
+    }
+  } catch (err) {
+    console.error('[AI] sdk.messaging.sendMessage failed:', err);
+  }
+
+  setStatus('Plugin/SDK not available');
+  console.warn('[AI] Neither PluginMessageHandler nor sdk.messaging available. Payload:', payload);
+  return false;
 }
 
 /* ---------- Capture + Scan ---------- */
@@ -217,8 +219,8 @@ async function captureAndScan() {
     overlay.style.display = 'none';
     capturedImageData = canvas.toDataURL('image/jpeg', 0.7);
     console.log('[Capture] Image captured');
-    showThinkingOverlay();
 
+    showThinkingOverlay();
     const { data: { text, confidence } } = await worker.recognize(canvas);
     let finalText = text;
     let finalConf = confidence;
@@ -238,11 +240,9 @@ async function captureAndScan() {
     if (finalText && finalText.trim().length > 0) {
       // UI: OCR result
       result.innerHTML = `✓ OCR result:<br /><br />${finalText.replace(/\n/g, '<br />')}`;
-
       // Extract + clean
       const extracted = extractInvoiceData(finalText);
       const cleanedOcr = cleanOcrText(finalText);
-
       // UI: structured data
       result.innerHTML += '<br />' + renderInvoiceExtraction(extracted);
 
@@ -253,21 +253,20 @@ async function captureAndScan() {
         ocrText: cleanedOcr,
         extracted
       };
-      const body = JSON.stringify(bodyObj).replace(/"/g, '\\"');
 
-      console.log('[AI] Dispatching email task with attachment via PluginMessageHandler');
-      try {
-        // If you have an input for recipient, fetch it; otherwise leave a placeholder/to be filled later
-        const toEmailInput = document.getElementById('emailInput');
-        const to = (toEmailInput?.value || '').trim();
-        const toEmail = to || 'recipient@example.com'; // fallback to placeholder
-        setStatus('Preparing email...');
-        sendToAIWithEmbeddedDataUrl(toEmail, subject, body, capturedImageData);
-        console.log('[Capture] ✓ AI email task dispatched successfully');
-      } catch (llmError) {
-        console.error('[Capture] ⚠️ AI email task failed:', llmError);
-        // Continue execution - don't fail the entire scan if AI send fails
+      // Prepare Rabbit R1-conform JSON envelope and send (to self)
+      const toEmailInput = document.getElementById('emailInput');
+      const toRaw = (toEmailInput?.value || '').trim();
+      const toEmail = toRaw || 'self';
+      const envelope = buildEnvelope(toEmail, subject, bodyObj, capturedImageData);
+
+      console.log('[AI] Dispatching Rabbit LLM email task with JSON envelope');
+      const sent = sendToRabbitLLM(envelope);
+      if (!sent) {
+        console.log('[AI] Payload fallback (log only):', { envelope });
       }
+
+      console.log('[Capture] ✓ AI email task dispatched (or logged)');
     } else {
       result.innerHTML = '⚠️ No text recognised. Please try again. Pay attention to lighting and focus.';
     }
@@ -296,9 +295,7 @@ scanButton.addEventListener('click', () => {
   result.innerHTML = '';
   result.style.display = 'none';
   result.classList.remove('has-content');
-
   console.log('[Event] Scan button clicked - restarting camera');
-
   // Ensure any previous stream is fully torn down before starting
   stopCamera(); // Stop existing camera stream first
   startCamera(); // Then start fresh camera preview
