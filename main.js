@@ -171,34 +171,10 @@ function sendToAIWithEmbeddedDataUrl(toEmail, subject, body, dataUrl) {
 
   
 const prompt = `
-You are my assistant. Send me the receipt scan data by email.
-
-Return ONLY valid JSON in this exact format:
-{"action":"email","to":"${toEmail}","subject":"Receipt Scan & Analysis","body":"<html><body>
-<h2>Receipt Scan & Analysis</h2>
-<b>OCR Text:</b>
-<pre>${ocrText}</pre>
-<b>Extracted Invoice Data:</b>
-<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse;font-family:sans-serif;'>
-<tr><th>Name</th><th>Price</th><th>Date</th><th>Vendor</th><th>Total</th></tr>
-${invoiceData.items.map(it => `<tr>
-<td>${it.name || 'N/A'}</td>
-<td>${it.price || 'N/A'}</td>
-<td>${invoiceData.date || 'N/A'}</td>
-<td>${invoiceData.vendor || 'N/A'}</td>
-<td>${invoiceData.total || 'N/A'}</td>
-</tr>`).join('')}
-</table>
-</body></html>","attachments":[{"dataUrl":"${dataUrl}"}]}
-
-Input:
-OCR Text:
-${ocrText}
-
-Invoice Data (JSON):
-${JSON.stringify(invoiceData, null, 2)}
+You are an assistant. Please email the attached receipt image and OCR scan to the recipient. 
+Return ONLY valid JSON in this exact format: 
+{"action":"email","to":"${toEmail}","subject":"Receipt Scan","body":"OCR Text:\\n${ocrText}\\n\\nExtracted Data:\\nVendor: ${invoiceData.vendor || 'N/A'}\\nDate: ${invoiceData.date || 'N/A'}\\nTotal: ${invoiceData.total || 'N/A'}\\nItems: ${invoiceData.items && invoiceData.items.length ? invoiceData.items.map(it => it.name + ' - ' + it.price).join('; ') : 'N/A'}","attachments":[{"dataUrl":"${dataUrl}"}]}
 `;
-
 
  
   
