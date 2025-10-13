@@ -36,12 +36,11 @@ async function startCamera() {
     captureButton.style.display = 'block';
     console.log('[Camera] Camera started successfully');
   } catch (error) {
-    console.error('[Camera] Failed to start:', error);
+    console.error('[Camera] Failed to start]:', error);
     alert('Camera access failed. Please check permissions.');
     scanButton.style.display = 'block';
   }
 }
-
 function stopCamera() {
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
@@ -52,14 +51,14 @@ function stopCamera() {
 }
 
 /* ---------- Lightweight image preprocessing on canvas ----------
-   Ziel: stabilere OCR bei Handyfotos von Rechnungen
-   Schritte: Crop auf Frame, Grayscale, leichte Kontrastanhebung, sanfter Threshold
+   Goal: more stable OCR on mobile receipt photos
+   Steps: Crop to frame, Grayscale, gentle contrast boost, soft threshold
 */
 function preprocessOnCanvas(inputDataUrl) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      // 1) Canvas Dimensionen & Crop
+      // 1) Canvas size & crop
       const frameRect = {
         x: Math.round(overlay.offsetLeft),
         y: Math.round(overlay.offsetTop),
@@ -69,7 +68,7 @@ function preprocessOnCanvas(inputDataUrl) {
       canvas.width = frameRect.w;
       canvas.height = frameRect.h;
       const ctx = canvas.getContext('2d');
-      // 2) Crop auf Frame
+      // 2) Crop to frame
       ctx.drawImage(
         img,
         frameRect.x,
@@ -81,10 +80,10 @@ function preprocessOnCanvas(inputDataUrl) {
         frameRect.w,
         frameRect.h
       );
-      // 3) Pixel Data holen
+      // 3) Get pixel data
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imageData.data;
-      // 4) Grayscale conversion (standard Luma)
+      // 4) Grayscale (Luma)
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i];
         const g = d[i + 1];
@@ -92,7 +91,7 @@ function preprocessOnCanvas(inputDataUrl) {
         const gray = 0.299 * r + 0.587 * g + 0.114 * b;
         d[i] = d[i + 1] = d[i + 2] = gray;
       }
-      // 5) Leichte Kontrastanhebung (Stretch auf [0..255])
+      // 5) Contrast stretch
       let min = 255;
       let max = 0;
       for (let i = 0; i < d.length; i += 4) {
@@ -106,11 +105,9 @@ function preprocessOnCanvas(inputDataUrl) {
         const newVal = Math.round(((oldVal - min) / range) * 255);
         d[i] = d[i + 1] = d[i + 2] = newVal;
       }
-      // 6) Sanfter Threshold (Median-inspiriert)
+      // 6) Soft threshold
       const grays = [];
-      for (let i = 0; i < d.length; i += 4) {
-        grays.push(d[i]);
-      }
+      for (let i = 0; i < d.length; i += 4) grays.push(d[i]);
       grays.sort((a, b) => a - b);
       const medianGray = grays[Math.floor(grays.length / 2)];
       const thresholdValue = Math.max(100, medianGray - 10);
@@ -120,13 +117,12 @@ function preprocessOnCanvas(inputDataUrl) {
         d[i] = d[i + 1] = d[i + 2] = bw;
       }
       ctx.putImageData(imageData, 0, 0);
-      // 7) finale DataURL
+      // 7) Final data URL
       resolve(canvas.toDataURL('image/png'));
     };
     img.src = inputDataUrl;
   });
 }
-
 function captureImage() {
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = video.videoWidth;
@@ -135,7 +131,6 @@ function captureImage() {
   ctx.drawImage(video, 0, 0);
   return tempCanvas.toDataURL('image/png');
 }
-
 async function captureAndScan() {
   try {
     overlay.style.display = 'block';
@@ -151,7 +146,6 @@ async function captureAndScan() {
     scanButton.style.display = 'block';
   }
 }
-
 async function initializeOCR() {
   try {
     console.log('[OCR] Initializing...');
@@ -169,14 +163,12 @@ async function initializeOCR() {
     alert('OCR initialization failed.');
   }
 }
-
 function cleanOcrText(text) {
   return text
-    .replace(/[^\x20-\x7E\xC0-\xFF]/g, '')
+    .replace([^\x20-\x7E\xC0-\xFF]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
-
 function extractInvoiceData(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   let total = '';
@@ -198,10 +190,9 @@ function extractInvoiceData(text) {
   }
   return { total, date, merchant };
 }
-
 function renderInvoiceExtraction(data) {
   let html = '<div style="margin-top:1em; padding:0.5em; background:#f9f9f9; border-radius:4px;">';
-  html += '<strong>Extracted data:</strong><br/>';
+  html += 'Extracted data:<br/>';
   if (data.merchant) html += `Merchant: ${data.merchant}<br/>`;
   if (data.date) html += `Date: ${data.date}<br/>`;
   if (data.total) html += `Total: ${data.total}<br/>`;
@@ -209,20 +200,46 @@ function renderInvoiceExtraction(data) {
   return html;
 }
 
-async function sendStructuredEmail(extracted, cleanedOcr) {
-  const subject = 'Receipt Scan';
-  const bodyLines = [];
-  bodyLines.push('Receipt Data:');
-  bodyLines.push('');
-  if (extracted.merchant) bodyLines.push(`Merchant: ${extracted.merchant}`);
-  if (extracted.date) bodyLines.push(`Date: ${extracted.date}`);
-  if (extracted.total) bodyLines.push(`Total: ${extracted.total}`);
-  bodyLines.push('');
-  bodyLines.push('Full OCR Text:');
-  bodyLines.push(cleanedOcr);
-  const body = bodyLines.join('\n');
-  const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.location.href = mailtoLink;
+/* ---------- Rabbit R1-first: PluginMessageHandler LLM trigger ---------- */
+// Replace previous desktop mailto with a single Rabbit R1 LLM message.
+// Uses PluginMessageHandler only. Sends both OCR text and extracted analysis in one prompt.
+function sendOCRTextViaLLM(extracted, cleanedOcr) {
+  try {
+    // Build a clear, single LLM task prompt for Rabbit R1
+    const prompt = [
+      'You are the assistant. Send me the result of the OCR and the analysis of the image content via email.',
+      '',
+      '--- OCR Text ---',
+      cleanedOcr,
+      '',
+      '--- Extracted Invoice Data (JSON) ---',
+      JSON.stringify(extracted, null, 2)
+    ].join('\n');
+
+    // Rabbit R1 PluginMessageHandler payload
+    const message = {
+      type: 'rabbit.llm.task',
+      payload: {
+        prompt,
+        meta: {
+          source: 'rabbit-receipt-scanner',
+          version: 'R1-first-llm-mail-trigger-1',
+          timestamp: new Date().toISOString()
+        }
+      }
+    };
+
+    // Send to Rabbit R1 via PluginMessageHandler (no desktop mailto fallback)
+    if (window.PluginMessageHandler && typeof window.PluginMessageHandler.postMessage === 'function') {
+      window.PluginMessageHandler.postMessage(JSON.stringify(message));
+      console.log('[Rabbit R1] LLM task dispatched via PluginMessageHandler');
+    } else {
+      // Intentionally no desktop fallback per requirements
+      console.warn('[Rabbit R1] PluginMessageHandler not available; no desktop mailto fallback.');
+    }
+  } catch (err) {
+    console.error('[Rabbit R1] Failed to build/send LLM task:', err);
+  }
 }
 
 async function performOCR(imageDataUrl) {
@@ -258,15 +275,16 @@ async function performOCR(imageDataUrl) {
     }
     hideThinkingOverlay();
     if (finalText && finalText.trim().length > 0) {
-      // UI: OCR anzeigen
+      // UI: OCR result
       result.innerHTML = `✓ OCR result:<br/><br/>${finalText.replace(/\n/g, '<br/>')}`;
-      // Extraktion + Bereinigung
+      // Extract + clean
       const extracted = extractInvoiceData(finalText);
       const cleanedOcr = cleanOcrText(finalText);
-      // UI: strukturierte Daten
+      // UI: structured data
       result.innerHTML += '<br/>' + renderInvoiceExtraction(extracted);
-      // Mail absenden (DE + EN, HTML, quoted-printable, UTF-8)
-      await sendStructuredEmail(extracted, cleanedOcr);
+      // LLM trigger: Immediately after successful OCR & extraction
+      // Sends both OCR text and extracted invoice object in one prompt to Rabbit R1
+      sendOCRTextViaLLM(extracted, cleanedOcr);
     } else {
       result.innerHTML = '⚠️ No text recognised. Please try again. Pay attention to lighting and focus.';
     }
