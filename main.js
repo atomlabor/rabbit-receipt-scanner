@@ -40,7 +40,7 @@ async function startCamera() {
     console.log('[Camera] Camera started successfully');
   } catch (error) {
     console.error('[Camera] Failed to start:', error);
-    alert('Kamerazugriff fehlgeschlagen. Bitte Berechtigungen prüfen.');
+    alert('Camera access failed. Please check permissions.');
     scanButton.style.display = 'block';
   }
 }
@@ -92,12 +92,12 @@ function preprocessOnCanvas(inputDataUrl) {
 // Präzise OCR-Initialisierung für Rechnungen in Deutsch und Englisch
 async function initializeOCR() {
   try {
-    statusText.textContent = 'Initialisiere OCR-Engine...';
+    statusText.textContent = 'Initialising OCR engine...';
     showThinkingOverlay();
 
     worker = await createWorker();
 
-    statusText.textContent = 'Lade Sprachen...';
+    statusText.textContent = 'Loading languages...';
     await worker.loadLanguage('deu+eng');
     await worker.initialize('deu+eng');
 
@@ -389,11 +389,9 @@ function buildRfc5322Body(html, charset = 'utf-8') {
 
 /* ---------- Mail + strikter Prompt ---------- */
 async function sendStructuredEmail(extracted, cleanedOcr) {
-  // HTML bauen (de + en) – Funktion hast du schon
   const html = buildBilingualEmailHTML(extracted, cleanedOcr);
   const bodyHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${html}</body></html>`;
 
-  // Plain-Text für Fallback / Clients ohne HTML
   const bodyText =
 `DE
 Rechnungszusammenfassung
@@ -424,7 +422,7 @@ ${cleanedOcr}`;
   const envelope = {
     action: 'email',
     subject: 'Rabbit Receipt Scan | Rechnungs-Scan',
-    // **WICHTIG**: getrennte Felder, KEINE Header im Body, KEIN quoted-printable
+
     body_html: bodyHtml,
     body_text: bodyText,
     content_type: 'text/html; charset=utf-8', // Hint für Gateway
@@ -445,14 +443,13 @@ ${cleanedOcr}`;
   const payload = {
     useLLM: true,
     message: prompt,
-    imageDataUrl: capturedImageData // optional: Bild anhängen, wenn dein Gateway das nutzt
-  };
+    imageDataUrl: capturedImageData 
 
   if (typeof PluginMessageHandler !== 'undefined') {
     PluginMessageHandler.postMessage(JSON.stringify(payload));
     console.log('[Email] Sent to AI via PluginMessageHandler');
   } else {
-    throw new Error('Plugin API nicht verfügbar');
+    throw new Error('Plugin API not available');
   }
 }
 
@@ -474,15 +471,15 @@ async function captureAndScan() {
     overlay.style.display = 'none';
     stopCamera();
 
-    statusText.textContent = 'Bereite OCR vor...';
+    statusText.textContent = 'Prepare OCR...';
     showThinkingOverlay();
     await new Promise(r => setTimeout(r, 150));
 
     // Preprocess
-    statusText.textContent = 'Vorverarbeitung...';
+    statusText.textContent = 'Pre-processing...';
     const preprocessedDataUrl = await preprocessOnCanvas(rawDataUrl);
 
-    statusText.textContent = 'Analysiere Text...';
+    statusText.textContent = 'Analyse text...';
     await new Promise(r => setTimeout(r, 150));
 
     // Erstlauf
@@ -496,7 +493,7 @@ async function captureAndScan() {
     // Fallback bei schwacher Confidence
     if (!text1.trim() || conf1 < 85) {
       console.log('[OCR] Low confidence or empty text, retrying with PSM 7 and DAWG on...');
-      statusText.textContent = 'Verarbeitung mit optimierten Parametern...';
+      statusText.textContent = 'Processing with optimised parameters...';
 
       await worker.setParameters({
         tessedit_pageseg_mode: '7',
@@ -539,7 +536,7 @@ async function captureAndScan() {
 
     if (finalText && finalText.trim().length > 0) {
       // UI: OCR anzeigen
-      result.innerHTML = `✓ OCR Ergebnis:<br><br>${finalText.replace(/\n/g, '<br>')}`;
+      result.innerHTML = `✓ OCR result:<br><br>${finalText.replace(/\n/g, '<br>')}`;
 
       // Extraktion + Bereinigung
       const extracted = extractInvoiceData(finalText);
@@ -551,7 +548,7 @@ async function captureAndScan() {
       // Mail absenden (DE + EN, HTML, quoted-printable, UTF-8)
       await sendStructuredEmail(extracted, cleanedOcr);
     } else {
-      result.innerHTML = '⚠️ Kein Text erkannt. Bitte erneut versuchen. Achte auf Licht und Fokus.';
+      result.innerHTML = '⚠️ No text recognised. Please try again. Pay attention to lighting and focus.';
     }
 
     result.classList.add('has-content');
@@ -559,7 +556,7 @@ async function captureAndScan() {
 
     scanButton.style.display = 'block';
     scanButton.classList.remove('hidden');
-    scanButton.textContent = 'Erneut scannen';
+    scanButton.textContent = 'Scan again';
 
     console.log('[OCR] Confidence:', finalConf);
 
@@ -567,7 +564,7 @@ async function captureAndScan() {
     console.error('[OCR] Recognition failed:', error);
     hideThinkingOverlay();
 
-    result.innerHTML = '❌ OCR fehlgeschlagen. Bitte erneut versuchen.';
+    result.innerHTML = '❌ OCR failed. Please try again.';
     result.style.display = 'block';
     result.classList.add('has-content');
 
