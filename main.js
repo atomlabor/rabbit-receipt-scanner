@@ -169,8 +169,31 @@ function renderInvoiceExtraction(data) {
 function sendToAIWithEmbeddedDataUrl(toEmail, subject, body, dataUrl) {
   console.log('[AI] Preparing payload for PluginMessageHandler...', { toEmail, subjectLength: subject?.length, bodyLength: body?.length, hasImage: !!dataUrl });
 
-  const prompt = `You are an assistant. Please email the attached image and the scan analysis to the recipient. Return ONLY valid JSON: {"action":"email","to":"${toEmail}","subject":"${subject}","body":"${body}","attachments":[{"dataUrl":"<dataurl>"}]}`;
+  
+ const prompt = `
+You are an assistant. Please email the attached receipt image and its scan analysis to the recipient.
 
+Format the email body as high-quality HTML:
+- Show all receipt data clearly and professionally.
+- Display the "OCR Text" in a <pre> block for readability.
+- Below, present the extracted invoice data as an HTML table, with columns for Name, Price, Date, Vendor, and Total.
+- Use bold labels and a clean, neutral font.
+- Add a headline: "Receipt Scan & Analysis".
+- If a data field is missing, show "N/A".
+
+The email must be in English.
+
+Return ONLY valid JSON in this exact format:
+{"action":"email","to":"${toEmail}","subject":"Receipt Scan & Analysis","body":"<html><body>HTML HERE</body></html>","attachments":[{"dataUrl":"${dataUrl}"}]}
+
+OCR Text:
+${ocrText}
+
+Extracted Invoice Data (JSON):
+${JSON.stringify(invoiceData, null, 2)}
+`;
+ 
+  
   const payload = {
     useLLM: true,
     message: prompt,
