@@ -4,7 +4,6 @@ const { createWorker } = Tesseract;
 let worker = null;
 let stream = null;
 let capturedImageData = null;
-
 // DOM elements
 const scanButton = document.getElementById('scanButton');
 const captureButton = document.getElementById('captureButton');
@@ -14,7 +13,6 @@ const overlay = document.getElementById('overlay');
 const thinkingOverlay = document.getElementById('thinking-overlay');
 const statusText = document.getElementById('status-text');
 const result = document.getElementById('result');
-
 /* ---------- UI helpers ---------- */
 function showThinkingOverlay() {
   thinkingOverlay.style.display = 'flex';
@@ -22,11 +20,18 @@ function showThinkingOverlay() {
 function hideThinkingOverlay() {
   thinkingOverlay.style.display = 'none';
 }
-
 /* ---------- Camera ---------- */
 async function startCamera() {
   try {
     console.log('[Camera] Starting camera...');
+    // Defensive clean-up before requesting a new stream
+    try {
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+      }
+    } catch (_) { /* no-op */ }
+    video.srcObject = null;
+
     scanButton.style.display = 'none';
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
@@ -39,17 +44,22 @@ async function startCamera() {
     console.error('[Camera] Failed to start]:', error);
     alert('Camera access failed. Please check permissions.');
     scanButton.style.display = 'block';
+    // Ensure we clear any partial state
+    video.srcObject = null;
   }
 }
 function stopCamera() {
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-    video.style.display = 'none';
-    captureButton.style.display = 'none';
-    console.log('[Camera] Camera stopped');
-  }
+  try {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+  } catch (_) { /* no-op */ }
+  // Defensive: clear video element regardless of stream existence
+  video.srcObject = null;
+  video.style.display = 'none';
+  captureButton.style.display = 'none';
+  console.log('[Camera] Camera stopped');
 }
-
 /* ---------- Lightweight image preprocessing on canvas ----------
    Goal: more stable OCR on mobile receipt photos
    Steps: Crop to frame, Grayscale, gentle contrast boost, soft threshold
@@ -180,7 +190,7 @@ function extractInvoiceData(text) {
       const match = line.match(/([0-9]+[.,][0-9]{2})/);
       if (match) total = match[1];
     }
-    const dateMatch = line.match(/(\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4})/);
+    const dateMatch = line.match(/(\d{1,2}[\.|\/-]\d{1,2}[\.|\/-]\d{2,4})/);
     if (dateMatch && !date) date = dateMatch[1];
     if (i === 0 || i === 1) {
       if (!merchant && line.length < 50 && line.length > 2) {
@@ -191,15 +201,14 @@ function extractInvoiceData(text) {
   return { total, date, merchant };
 }
 function renderInvoiceExtraction(data) {
-  let html = '<div style="margin-top:1em; padding:0.5em; background:#f9f9f9; border-radius:4px;">';
-  html += 'Extracted data:<br/>';
-  if (data.merchant) html += `Merchant: ${data.merchant}<br/>`;
-  if (data.date) html += `Date: ${data.date}<br/>`;
-  if (data.total) html += `Total: ${data.total}<br/>`;
+  let html = '<div node="_210" style="margin-top:1em; padding:0.5em; background:#f9f9f9; border-radius:4px;">';
+  html += 'Extracted data:<br />';
+  if (data.merchant) html += `Merchant: ${data.merchant}<br />`;
+  if (data.date) html += `Date: ${data.date}<br />`;
+  if (data.total) html += `Total: ${data.total}<br />`;
   html += '</div>';
   return html;
 }
-
 /* ---------- Rabbit R1-first: PluginMessageHandler LLM trigger ---------- */
 // Replace previous desktop mailto with a single Rabbit R1 LLM message.
 // Uses PluginMessageHandler only. Sends both OCR text and extracted analysis in one prompt.
@@ -215,7 +224,6 @@ function sendOCRTextViaLLM(extracted, cleanedOcr) {
       '--- Extracted Invoice Data (JSON) ---',
       JSON.stringify(extracted, null, 2)
     ].join('\n');
-
     // Rabbit R1 PluginMessageHandler payload
     const message = {
       type: 'rabbit.llm.task',
@@ -228,7 +236,6 @@ function sendOCRTextViaLLM(extracted, cleanedOcr) {
         }
       }
     };
-
     // Send to Rabbit R1 via PluginMessageHandler (no desktop mailto fallback)
     if (window.PluginMessageHandler && typeof window.PluginMessageHandler.postMessage === 'function') {
       window.PluginMessageHandler.postMessage(JSON.stringify(message));
@@ -241,7 +248,6 @@ function sendOCRTextViaLLM(extracted, cleanedOcr) {
     console.error('[Rabbit R1] Failed to build/send LLM task:', err);
   }
 }
-
 async function performOCR(imageDataUrl) {
   try {
     console.log('[OCR] Starting recognition...');
@@ -276,12 +282,12 @@ async function performOCR(imageDataUrl) {
     hideThinkingOverlay();
     if (finalText && finalText.trim().length > 0) {
       // UI: OCR result
-      result.innerHTML = `✓ OCR result:<br/><br/>${finalText.replace(/\n/g, '<br/>')}`;
+      result.innerHTML = `✓ OCR result:<br /><br />${finalText.replace(/\n/g, '<br />')}`;
       // Extract + clean
       const extracted = extractInvoiceData(finalText);
       const cleanedOcr = cleanOcrText(finalText);
       // UI: structured data
-      result.innerHTML += '<br/>' + renderInvoiceExtraction(extracted);
+      result.innerHTML += '<br />' + renderInvoiceExtraction(extracted);
       // LLM trigger: Immediately after successful OCR & extraction
       // Sends both OCR text and extracted invoice object in one prompt to Rabbit R1
       sendOCRTextViaLLM(extracted, cleanedOcr);
@@ -306,17 +312,23 @@ async function performOCR(imageDataUrl) {
     scanButton.classList.remove('hidden');
   }
 }
-
 /* ---------- Events ---------- */
 scanButton.addEventListener('click', () => {
   result.innerHTML = '';
   result.style.display = 'none';
   result.classList.remove('has-content');
+  // Ensure any previous stream is fully torn down before starting
   stopCamera(); // Stop existing camera stream first
   startCamera(); // Then start fresh camera preview
 });
 
-captureButton.addEventListener('click', captureAndScan);
+document.addEventListener('visibilitychange', () => {
+  // If the tab becomes hidden, release camera to avoid OS-level locking
+  if (document.hidden) {
+    stopCamera();
+  }
+});
 
+captureButton.addEventListener('click', captureAndScan);
 /* ---------- Init ---------- */
 initializeOCR();
