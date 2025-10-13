@@ -171,7 +171,7 @@ function sendToAIWithEmbeddedDataUrl(toEmail, subject, body, dataUrl) {
 
   
 const prompt = `
-You are an assistant. Please email the attached receipt image and OCR scan to the recipient. 
+You are an assistant. Please email me the attached receipt image and OCR scan. 
 Return ONLY valid JSON in this exact format: 
 {"action":"email","to":"${toEmail}","subject":"Receipt Scan","body":"OCR Text:\\n${ocrText}\\n\\nExtracted Data:\\nVendor: ${invoiceData.vendor || 'N/A'}\\nDate: ${invoiceData.date || 'N/A'}\\nTotal: ${invoiceData.total || 'N/A'}\\nItems: ${invoiceData.items && invoiceData.items.length ? invoiceData.items.map(it => it.name + ' - ' + it.price).join('; ') : 'N/A'}","attachments":[{"dataUrl":"${dataUrl}"}]}
 `;
