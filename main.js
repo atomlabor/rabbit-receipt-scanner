@@ -13,6 +13,7 @@ const overlay = document.getElementById('overlay');
 const thinkingOverlay = document.getElementById('thinking-overlay');
 const statusText = document.getElementById('status-text');
 const result = document.getElementById('result');
+
 /* ---------- UI helpers ---------- */
 function showThinkingOverlay() {
   thinkingOverlay.style.display = 'flex';
@@ -20,35 +21,46 @@ function showThinkingOverlay() {
 function hideThinkingOverlay() {
   thinkingOverlay.style.display = 'none';
 }
+
+/* ---------- Status helper ---------- */
+function setStatus(msg) {
+  try {
+    if (statusText) statusText.textContent = msg;
+    console.log('[Status]', msg);
+  } catch (e) {
+    console.log('[Status:fallback]', msg);
+  }
+}
+
 /* ---------- Camera ---------- */
 async function startCamera() {
   try {
     console.log('[Camera] Starting camera...');
-    
+
     // Verify critical elements exist
     if (!video) {
       console.error('[Camera] Video element not found!');
       alert('Video element missing. Please reload the page.');
       return;
     }
-    
+
     // Defensive clean-up before requesting a new stream
     try {
       if (video.srcObject) {
         video.srcObject.getTracks().forEach(t => t.stop());
       }
     } catch (_) { /* no-op */ }
-    
+
     video.srcObject = null;
     scanButton.style.display = 'none';
-    
+
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
-    
+
     // Defensive camera initialization
     video.srcObject = stream;
-    
+
     // Explicitly play the video - critical for preview to appear
     try {
       await video.play();
@@ -57,10 +69,10 @@ async function startCamera() {
       console.warn('[Camera] Video.play() failed, trying without await:', playError);
       video.play();
     }
-    
+
     video.style.display = 'block';
     captureButton.style.display = 'block';
-    
+
     console.log('[Camera] Camera started successfully, preview visible');
     console.log('[Camera] Video element state:', {
       srcObject: !!video.srcObject,
@@ -83,7 +95,7 @@ function stopCamera() {
       stream.getTracks().forEach(track => track.stop());
     }
   } catch (_) { /* no-op */ }
-  
+
   // Defensive: clear video element regardless of stream existence
   if (video) {
     video.srcObject = null;
@@ -94,6 +106,7 @@ function stopCamera() {
   overlay.style.display = 'none';
   console.log('[Camera] Camera stopped');
 }
+
 /* ---------- OCR ---------- */
 async function initializeOCR() {
   try {
@@ -105,12 +118,14 @@ async function initializeOCR() {
     alert('OCR initialization failed. Please reload.');
   }
 }
+
 function cleanOcrText(raw) {
   return raw
     .replace(/[^a-zA-Z0-9\s.,€$£¥:-]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
+
 function extractInvoiceData(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   let total = null;
@@ -118,7 +133,7 @@ function extractInvoiceData(text) {
   let vendor = lines[0] || 'Unknown';
   const items = [];
   const totalRegex = /(?:total|sum|amount|gesamt)[:\s]*([€$£¥]?\s*[\d.,]+)/i;
-  const dateRegex = /\b(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})\b/;
+  const dateRegex = /\b(\d{1,2}[\/. -]\d{1,2}[\/. -]\d{2,4})\b/;
   const itemRegex = /([a-z\s]+)\s+([€$£¥]?\s*[\d.,]+)/i;
   for (const line of lines) {
     const tm = line.match(totalRegex);
@@ -132,91 +147,54 @@ function extractInvoiceData(text) {
   }
   return { vendor, date, total, items };
 }
+
 function renderInvoiceExtraction(data) {
   let html = '<div style="margin-top:12px; padding:12px; background:#f9f9f9; border-radius:8px;">';
-  html += 'Extracted Invoice Data:<br/>';
-  html += `Vendor: ${data.vendor || 'N/A'}<br/>`;
-  html += `Date: ${data.date || 'N/A'}<br/>`;
-  html += `Total: ${data.total || 'N/A'}<br/>`;
+  html += 'Extracted Invoice Data:<br />';
+  html += `Vendor: ${data.vendor || 'N/A'}<br />`;
+  html += `Date: ${data.date || 'N/A'}<br />`;
+  html += `Total: ${data.total || 'N/A'}<br />`;
   if (data.items && data.items.length > 0) {
     html += 'Items:<ul style="margin:4px 0; padding-left:20px;">';
     data.items.forEach(it => {
-      html += `<li>${it.name}: ${it.price}</li>`;
+      html += `${it.name}: ${it.price}`;
     });
     html += '</ul>';
   }
   html += '</div>';
   return html;
 }
-function sendOCRTextViaLLM(invoiceData, ocrText) {
-  console.log('[LLM] sendOCRTextViaLLM called with:', { invoiceData, ocrText });
-  
-  try {
-    // Validate inputs
-    if (!invoiceData) {
-      console.error('[LLM] Missing invoiceData parameter');
-      throw new Error('Invoice data is required');
-    }
-    if (!ocrText || typeof ocrText !== 'string') {
-      console.error('[LLM] Invalid or missing ocrText parameter');
-      throw new Error('Valid OCR text is required');
-    }
-    
-    console.log('[LLM] Building prompt for Rabbit R1 assistant...');
-    
-    // Construct the comprehensive prompt with embedded OCR and invoice data
-    const prompt = `You are the assistant. Send me the result of the OCR and analysis of the image content via email.
 
-OCR Text:
-${ocrText}
+/* ---------- AI email routine (replaces Rabbit R1 rabbithole call) ---------- */
+function sendToAIWithEmbeddedDataUrl(toEmail, subject, body, dataUrl) {
+  console.log('[AI] Preparing payload for PluginMessageHandler...', { toEmail, subjectLength: subject?.length, bodyLength: body?.length, hasImage: !!dataUrl });
 
-Extracted Invoice Data (JSON):
-${JSON.stringify(invoiceData, null, 2)}`;
-    
-    console.log('[LLM] Prompt constructed:', prompt);
-    console.log('[LLM] Checking window.rabbithole availability...');
-    
-    // Check if rabbithole API is available
-    if (!window.rabbithole) {
-      const errorMsg = '[LLM] window.rabbithole is not available - Rabbit R1 API not found';
-      console.error(errorMsg);
-      throw new Error(errorMsg);
+  const prompt = `You are an assistant. Please email the attached image and the scan analysis to the recipient. Return ONLY valid JSON: {"action":"email","to":"${toEmail}","subject":"${subject}","body":"${body}","attachments":[{"dataUrl":"<dataurl>"}]}`;
+
+  const payload = {
+    useLLM: true,
+    message: prompt,
+    imageDataUrl: dataUrl
+  };
+
+  if (typeof PluginMessageHandler !== 'undefined') {
+    console.log('[AI] PluginMessageHandler available. Sending message...');
+    try {
+      PluginMessageHandler.postMessage(JSON.stringify(payload));
+      setStatus('Sent to AI...');
+      console.log('[AI] ✓ Payload sent to AI via PluginMessageHandler');
+    } catch (err) {
+      console.error('[AI] ❌ Failed to post message to PluginMessageHandler:', err);
+      console.log('[AI] Payload (for debugging):', payload);
+      setStatus('Plugin postMessage failed');
     }
-    
-    if (typeof window.rabbithole.sendMessageToR1 !== 'function') {
-      const errorMsg = '[LLM] window.rabbithole.sendMessageToR1 is not a function';
-      console.error(errorMsg);
-      throw new Error(errorMsg);
-    }
-    
-    console.log('[LLM] Sending prompt to Rabbit R1 via window.rabbithole.sendMessageToR1...');
-    
-    // Send the prompt-based task to Rabbit R1 assistant
-    window.rabbithole.sendMessageToR1(prompt);
-    
-    console.log('[LLM] ✓ Message successfully sent to Rabbit R1 assistant');
-    console.log('[LLM] ✓ LLM task dispatched - assistant will process OCR and send email');
-    
-  } catch (error) {
-    // Comprehensive error handling with detailed logging
-    console.error('[LLM] ❌ Failed to send message to Rabbit R1:', error);
-    console.error('[LLM] Error details:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    });
-    console.error('[LLM] Context at time of error:', {
-      hasRabbithole: !!window.rabbithole,
-      hasFunction: !!(window.rabbithole && window.rabbithole.sendMessageToR1),
-      invoiceDataPresent: !!invoiceData,
-      ocrTextPresent: !!ocrText,
-      ocrTextLength: ocrText ? ocrText.length : 0
-    });
-    
-    // Re-throw to allow caller to handle if needed
-    throw error;
+  } else {
+    setStatus('Plugin API not available');
+    console.warn('[AI] PluginMessageHandler not available. Logging payload for debugging.');
+    console.log('Payload:', payload);
   }
 }
+
 /* ---------- Capture + Scan ---------- */
 async function captureAndScan() {
   try {
@@ -232,12 +210,14 @@ async function captureAndScan() {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     stopCamera();
     overlay.style.display = 'none';
-    capturedImageData = canvas.toDataURL('image/png');
+    capturedImageData = canvas.toDataURL('image/jpeg', 0.7);
     console.log('[Capture] Image captured');
     showThinkingOverlay();
+
     const { data: { text, confidence } } = await worker.recognize(canvas);
     let finalText = text;
     let finalConf = confidence;
+
     if (confidence < 60) {
       console.log('[OCR] Low confidence, adjusting parameters...');
       await worker.setParameters({
@@ -247,28 +227,46 @@ async function captureAndScan() {
         load_freq_dawg: '1'
       });
     }
+
     hideThinkingOverlay();
+
     if (finalText && finalText.trim().length > 0) {
       // UI: OCR result
-      result.innerHTML = `✓ OCR result:<br/><br/>${finalText.replace(/\n/g, '<br/>')}`;
+      result.innerHTML = `✓ OCR result:<br /><br />${finalText.replace(/\n/g, '<br />')}`;
+
       // Extract + clean
       const extracted = extractInvoiceData(finalText);
       const cleanedOcr = cleanOcrText(finalText);
+
       // UI: structured data
-      result.innerHTML += '<br/>' + renderInvoiceExtraction(extracted);
-      // LLM trigger: Immediately after successful OCR & extraction
-      // Sends prompt-based LLM task to Rabbit R1 assistant with embedded OCR and invoice data
-      console.log('[Capture] Triggering LLM assistant with OCR results...');
+      result.innerHTML += '<br />' + renderInvoiceExtraction(extracted);
+
+      // Build email subject/body with OCR text and extracted data
+      const subject = 'Receipt scan and analysis';
+      const bodyObj = {
+        note: 'Attached is the receipt image. Below are OCR text and extracted data.',
+        ocrText: cleanedOcr,
+        extracted
+      };
+      const body = JSON.stringify(bodyObj).replace(/"/g, '\\"');
+
+      console.log('[AI] Dispatching email task with attachment via PluginMessageHandler');
       try {
-        sendOCRTextViaLLM(extracted, cleanedOcr);
-        console.log('[Capture] ✓ LLM assistant task dispatched successfully');
+        // If you have an input for recipient, fetch it; otherwise leave a placeholder/to be filled later
+        const toEmailInput = document.getElementById('emailInput');
+        const to = (toEmailInput?.value || '').trim();
+        const toEmail = to || 'recipient@example.com'; // fallback to placeholder
+        setStatus('Preparing email...');
+        sendToAIWithEmbeddedDataUrl(toEmail, subject, body, capturedImageData);
+        console.log('[Capture] ✓ AI email task dispatched successfully');
       } catch (llmError) {
-        console.error('[Capture] ⚠️ LLM assistant task failed:', llmError);
-        // Continue execution - don't fail the entire scan if LLM send fails
+        console.error('[Capture] ⚠️ AI email task failed:', llmError);
+        // Continue execution - don't fail the entire scan if AI send fails
       }
     } else {
       result.innerHTML = '⚠️ No text recognised. Please try again. Pay attention to lighting and focus.';
     }
+
     result.classList.add('has-content');
     result.style.display = 'block';
     scanButton.style.display = 'block';
@@ -287,24 +285,28 @@ async function captureAndScan() {
     scanButton.classList.remove('hidden');
   }
 }
+
 /* ---------- Events ---------- */
 scanButton.addEventListener('click', () => {
   result.innerHTML = '';
   result.style.display = 'none';
   result.classList.remove('has-content');
-  
+
   console.log('[Event] Scan button clicked - restarting camera');
-  
+
   // Ensure any previous stream is fully torn down before starting
   stopCamera(); // Stop existing camera stream first
   startCamera(); // Then start fresh camera preview
 });
+
 document.addEventListener('visibilitychange', () => {
   // If the tab becomes hidden, release camera to avoid OS-level locking
   if (document.hidden) {
     stopCamera();
   }
 });
+
 captureButton.addEventListener('click', captureAndScan);
+
 /* ---------- Init ---------- */
 initializeOCR();
