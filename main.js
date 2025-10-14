@@ -54,7 +54,9 @@ async function startCamera() {
     video.srcObject = stream;
     // Explicitly play the video - critical for preview to appear
     try {
+      video.style.display = 'block';
       await video.play();
+      video.style.display = 'block';
       console.log('[Camera] Video playback started');
     } catch (playErr) {
       console.warn('[Camera] video.play() threw:', playErr);
@@ -156,12 +158,12 @@ async function captureAndScan() {
       const subject = 'Receipt scanned via Rabbit App';
       const bodyObj = {
         text: `Receipt Data:\n\n${cleanedText}\n\n(OCR confidence: ${finalConf}%)`,
-        html: `<p><strong>Receipt Data:</strong></p><pre>${cleanedText}</pre><p>(OCR confidence: ${finalConf}%)</p>`
+        html: `Receipt Data:${cleanedText}(OCR confidence: ${finalConf}%)`
       };
       result.innerHTML = `
-        <strong>Receipt recognised:</strong><br><br>
+        Receipt recognised:<br/><br/>
         <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
-        <br><small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
+        <br/><small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
       `;
       console.log('[Capture] Preparing email to user...');
       // Prepare Rabbit R1-conform JSON envelope and send (to self)
