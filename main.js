@@ -4,6 +4,7 @@ const { createWorker } = Tesseract;
 let worker = null;
 let stream = null;
 let capturedImageData = null;
+
 // DOM elements
 const scanButton = document.getElementById('scanButton');
 const captureButton = document.getElementById('captureButton');
@@ -13,13 +14,16 @@ const overlay = document.getElementById('overlay');
 const thinkingOverlay = document.getElementById('thinking-overlay');
 const statusText = document.getElementById('status-text');
 const result = document.getElementById('result');
+
 /* ---------- UI helpers ---------- */
 function showThinkingOverlay() {
   thinkingOverlay.style.display = 'flex';
 }
+
 function hideThinkingOverlay() {
   thinkingOverlay.style.display = 'none';
 }
+
 /* ---------- Status helper ---------- */
 function setStatus(msg) {
   try {
@@ -29,6 +33,7 @@ function setStatus(msg) {
     console.log('[Status:fallback]', msg);
   }
 }
+
 /* ---------- Camera ---------- */
 async function startCamera() {
   try {
@@ -39,19 +44,24 @@ async function startCamera() {
       alert('Video element missing. Please reload the page.');
       return;
     }
+    
     // Defensive clean-up before requesting a new stream
     try {
       if (video.srcObject) {
         video.srcObject.getTracks().forEach(t => t.stop());
       }
     } catch (_) { /* no-op */ }
+    
     video.srcObject = null;
     scanButton.style.display = 'none';
+    
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
+    
     // Defensive camera initialization
     video.srcObject = stream;
+    
     // Explicitly play the video - critical for preview to appear
     try {
       video.style.display = 'block';
@@ -62,6 +72,7 @@ async function startCamera() {
       console.warn('[Camera] video.play() threw:', playErr);
       // Some browsers might require user gesture; just log and proceed
     }
+    
     overlay.style.display = 'flex';
     captureButton.style.display = 'block';
     console.log('[Camera] Camera started and preview visible');
@@ -71,6 +82,7 @@ async function startCamera() {
     scanButton.style.display = 'block';
   }
 }
+
 function stopCamera() {
   if (stream) {
     stream.getTracks().forEach(track => {
@@ -89,6 +101,7 @@ function stopCamera() {
   overlay.style.display = 'none';
   console.log('[Camera] Camera stopped and overlay hidden');
 }
+
 /* ---------- OCR ---------- */
 async function initializeOCR() {
   try {
@@ -102,6 +115,7 @@ async function initializeOCR() {
     setStatus('OCR initialization failed');
   }
 }
+
 /* ---------- Rabbit R1 API helper (JSON over Bluetooth) ---------- */
 // Modified function to send email via LLM with embedded data URL
 function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl) {
@@ -124,6 +138,33 @@ function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl) {
     return false;
   }
 }
+
+/**
+ * NEW FEATURE: Analyse receipt image with LLM
+ * Sends image directly to Rabbit R1 LLM backend for structured JSON extraction
+ * @param {string} imageDataUrl - Base64 encoded image data URL
+ */
+function analyseReceiptImageWithLLM(imageDataUrl) {
+  const prompt = `Analysiere das angehängte Bild eines Kassenbons und liefere ein JSON mit diesen Feldern: { "products": [ { "name": "...", "price": ... } ], "total": ..., "date": "...", "vendor": "..." }. Return ONLY valid JSON. No extra text.`;
+  
+  const payload = {
+    useLLM: true,
+    message: prompt,
+    imageDataUrl: imageDataUrl
+  };
+  
+  console.log('[LLM-Analysis] Sending receipt image to LLM for structured analysis:', payload);
+  
+  try {
+    PluginMessageHandler.postMessage(JSON.stringify(payload));
+    console.log('[LLM-Analysis] Message posted successfully to Rabbit R1 LLM backend');
+    return true;
+  } catch (error) {
+    console.error('[LLM-Analysis] Failed to post message:', error);
+    return false;
+  }
+}
+
 /**
  * Build a Rabbit-conform JSON envelope.
  * @param {string} toEmail – to field (or 'self')
@@ -140,6 +181,7 @@ function buildEnvelope(toEmail, subject, bodyObj, dataUrl) {
     attachments: dataUrl ? [{ filename: '', contentType: 'image/jpeg', dataUrl }] : []
   };
 }
+
 /* ---------- Capture & OCR ---------- */
 async function captureAndScan() {
   try {
@@ -148,6 +190,7 @@ async function captureAndScan() {
       alert('No camera active. Please start scanning first.');
       return;
     }
+    
     console.log('[Capture] Capturing frame...');
     const context = canvas.getContext('2d');
     canvas.width = video.videoWidth;
@@ -155,29 +198,38 @@ async function captureAndScan() {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     capturedImageData = canvas.toDataURL('image/jpeg', 0.9);
     console.log('[Capture] Image captured, data URL length:', capturedImageData.length);
+    
     stopCamera();
+    
     // Show thinking overlay
     showThinkingOverlay();
     setStatus('Recognising text...');
+    
     console.log('[OCR] Starting recognition...');
     const { data: { text, confidence } } = await worker.recognize(canvas);
     const finalConf = (confidence || 0).toFixed(1);
     console.log('[OCR] Recognition complete:', { textLength: text.length, confidence: finalConf });
+    
     hideThinkingOverlay();
+    
     const cleanedText = (text || '').trim();
+    
     if (cleanedText.length > 0) {
       // Build structured body (plaintext + HTML)
       const subject = 'Receipt scanned via Rabbit App';
       const bodyObj = {
         text: `Receipt Data:\n\n${cleanedText}\n\n(OCR confidence: ${finalConf}%)`,
-        html: `Receipt Data:${cleanedText}(OCR confidence: ${finalConf}%)`
+        html: `<p>Receipt Data:</p><pre>${cleanedText}</pre><p>(OCR confidence: ${finalConf}%)</p>`
       };
+      
       result.innerHTML = `
-        Receipt recognised:
+        <p>Receipt recognised:</p>
         <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
         <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
       `;
+      
       console.log('[Capture] Preparing email to user...');
+      
       // Get recipient email and send via LLM
       const toEmailInput = document.getElementById('emailInput');
       const toRaw = (toEmailInput?.value || '').trim();
@@ -185,13 +237,27 @@ async function captureAndScan() {
       
       console.log('[AI] Dispatching email via LLM with embedded data URL');
       const sent = sendToAIWithEmbeddedDataUrl(toEmail, capturedImageData);
+      
       if (!sent) {
         console.log('[AI] Failed to send message');
       }
+      
       console.log('[Capture] ✓ AI email task dispatched');
+      
+      // NEW: Also trigger LLM-based receipt analysis
+      console.log('[LLM-Analysis] Triggering structured receipt analysis...');
+      const analysisTriggered = analyseReceiptImageWithLLM(capturedImageData);
+      
+      if (analysisTriggered) {
+        console.log('[LLM-Analysis] ✓ Receipt analysis task dispatched to LLM');
+      } else {
+        console.log('[LLM-Analysis] Failed to trigger analysis');
+      }
+      
     } else {
       result.innerHTML = '⚠️ No text recognised. Please try again. Pay attention to lighting and focus.';
     }
+    
     result.classList.add('has-content');
     result.style.display = 'block';
     video.style.display = 'none';
@@ -199,6 +265,7 @@ async function captureAndScan() {
     scanButton.style.display = 'block';
     scanButton.classList.remove('hidden');
     scanButton.textContent = 'Scan again';
+    
     console.log('[OCR] Confidence:', finalConf);
   } catch (error) {
     console.error('[OCR] Recognition failed:', error);
@@ -214,6 +281,7 @@ async function captureAndScan() {
     scanButton.classList.remove('hidden');
   }
 }
+
 /* ---------- Events ---------- */
 scanButton.addEventListener('click', () => {
   result.innerHTML = '';
@@ -224,12 +292,15 @@ scanButton.addEventListener('click', () => {
   stopCamera(); // Stop existing camera stream first
   startCamera(); // Then start fresh camera preview
 });
+
 document.addEventListener('visibilitychange', () => {
   // If the tab becomes hidden, release camera to avoid OS-level locking
   if (document.hidden) {
     stopCamera();
   }
 });
+
 captureButton.addEventListener('click', captureAndScan);
+
 /* ---------- Init ---------- */
 initializeOCR();
