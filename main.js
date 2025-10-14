@@ -4,6 +4,7 @@ const { createWorker } = Tesseract;
 let worker = null;
 let stream = null;
 let capturedImageData = null;
+
 // DOM elements
 const scanButton = document.getElementById('scanButton');
 const captureButton = document.getElementById('captureButton');
@@ -13,13 +14,16 @@ const overlay = document.getElementById('overlay');
 const thinkingOverlay = document.getElementById('thinking-overlay');
 const statusText = document.getElementById('status-text');
 const result = document.getElementById('result');
+
 /* ---------- UI helpers ---------- */
 function showThinkingOverlay() {
   thinkingOverlay.style.display = 'flex';
 }
+
 function hideThinkingOverlay() {
   thinkingOverlay.style.display = 'none';
 }
+
 /* ---------- Status helper ---------- */
 function setStatus(msg) {
   try {
@@ -29,16 +33,19 @@ function setStatus(msg) {
     console.log('[Status:fallback]', msg);
   }
 }
+
 /* ---------- Camera ---------- */
 async function startCamera() {
   try {
     console.log('[Camera] Starting camera...');
+
     // Verify critical elements exist
     if (!video) {
       console.error('[Camera] Video element not found!');
       alert('Video element missing. Please reload the page.');
       return;
     }
+
     // Defensive clean-up before requesting a new stream
     try {
       if (video.srcObject) {
@@ -46,12 +53,15 @@ async function startCamera() {
       }
     } catch (_) { /* no-op */ }
     video.srcObject = null;
+
     scanButton.style.display = 'none';
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
+
     // Defensive camera initialization
     video.srcObject = stream;
+
     // Explicitly play the video - critical for preview to appear
     try {
       video.style.display = 'block';
@@ -62,6 +72,7 @@ async function startCamera() {
       console.warn('[Camera] video.play() threw:', playErr);
       // Some browsers might require user gesture; just log and proceed
     }
+
     overlay.style.display = 'flex';
     captureButton.style.display = 'block';
     console.log('[Camera] Camera started and preview visible');
@@ -71,6 +82,7 @@ async function startCamera() {
     scanButton.style.display = 'block';
   }
 }
+
 function stopCamera() {
   if (stream) {
     stream.getTracks().forEach(track => {
@@ -89,6 +101,7 @@ function stopCamera() {
   overlay.style.display = 'none';
   console.log('[Camera] Camera stopped and overlay hidden');
 }
+
 /* ---------- OCR ---------- */
 async function initializeOCR() {
   try {
@@ -102,6 +115,7 @@ async function initializeOCR() {
     setStatus('OCR initialization failed');
   }
 }
+
 /* ---------- Rabbit R1 API helper (JSON over Bluetooth) ---------- */
 // In a real R1 app, this function would invoke the native Bluetooth bridge
 // provided by the system to send the JSON envelope to the R1 device.
@@ -113,6 +127,7 @@ function sendToRabbitLLM(envelope) {
   // In a real implementation, this would use native R1 API calls
   return false; // Always fallback to console log in web mock
 }
+
 /**
  * Build a Rabbit-conform JSON envelope.
  * @param {string} toEmail – to field (or 'self')
@@ -129,6 +144,7 @@ function buildEnvelope(toEmail, subject, bodyObj, dataUrl) {
     attachments: dataUrl ? [{ filename: '', contentType: 'image/jpeg', dataUrl }] : []
   };
 }
+
 /* ---------- Capture & OCR ---------- */
 async function captureAndScan() {
   try {
@@ -137,6 +153,7 @@ async function captureAndScan() {
       alert('No camera active. Please start scanning first.');
       return;
     }
+
     console.log('[Capture] Capturing frame...');
     const context = canvas.getContext('2d');
     canvas.width = video.videoWidth;
@@ -144,15 +161,20 @@ async function captureAndScan() {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     capturedImageData = canvas.toDataURL('image/jpeg', 0.9);
     console.log('[Capture] Image captured, data URL length:', capturedImageData.length);
+
     stopCamera();
+
     // Show thinking overlay
     showThinkingOverlay();
     setStatus('Recognising text...');
     console.log('[OCR] Starting recognition...');
+
     const { data: { text, confidence } } = await worker.recognize(canvas);
     const finalConf = (confidence || 0).toFixed(1);
     console.log('[OCR] Recognition complete:', { textLength: text.length, confidence: finalConf });
+
     hideThinkingOverlay();
+
     const cleanedText = (text || '').trim();
     if (cleanedText.length > 0) {
       // Build structured body (plaintext + HTML)
@@ -161,29 +183,37 @@ async function captureAndScan() {
         text: `Receipt Data:\n\n${cleanedText}\n\n(OCR confidence: ${finalConf}%)`,
         html: `Receipt Data:${cleanedText}(OCR confidence: ${finalConf}%)`
       };
+
       result.innerHTML = `
         Receipt recognised:
         <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
         <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
       `;
+
       console.log('[Capture] Preparing email to user...');
+
       // Prepare Rabbit R1-conform JSON envelope and send (to self)
       const toEmailInput = document.getElementById('emailInput');
       const toRaw = (toEmailInput?.value || '').trim();
       const toEmail = toRaw || 'self';
+
       const envelope = buildEnvelope(toEmail, subject, bodyObj, capturedImageData);
       console.log('[AI] Dispatching Rabbit LLM email task with JSON envelope');
       const sent = sendToRabbitLLM(envelope);
+
       if (!sent) {
         console.log('[AI] Payload fallback (log only):', { envelope });
       }
+
       console.log('[Capture] ✓ AI email task dispatched (or logged)');
     } else {
       result.innerHTML = '⚠️ No text recognised. Please try again. Pay attention to lighting and focus.';
     }
+
     result.classList.add('has-content');
     result.style.display = 'block';
     video.style.display = 'none';
+    captureButton.style.display = 'none';
     scanButton.style.display = 'block';
     scanButton.classList.remove('hidden');
     scanButton.textContent = 'Scan again';
@@ -191,9 +221,11 @@ async function captureAndScan() {
   } catch (error) {
     console.error('[OCR] Recognition failed:', error);
     hideThinkingOverlay();
+
     result.innerHTML = '❌ OCR failed. Please try again.';
     result.style.display = 'block';
     video.style.display = 'none';
+    captureButton.style.display = 'none';
     result.classList.add('has-content');
     overlay.style.display = 'none';
     stopCamera();
@@ -201,6 +233,7 @@ async function captureAndScan() {
     scanButton.classList.remove('hidden');
   }
 }
+
 /* ---------- Events ---------- */
 scanButton.addEventListener('click', () => {
   result.innerHTML = '';
@@ -211,12 +244,15 @@ scanButton.addEventListener('click', () => {
   stopCamera(); // Stop existing camera stream first
   startCamera(); // Then start fresh camera preview
 });
+
 document.addEventListener('visibilitychange', () => {
   // If the tab becomes hidden, release camera to avoid OS-level locking
   if (document.hidden) {
     stopCamera();
   }
 });
+
 captureButton.addEventListener('click', captureAndScan);
+
 /* ---------- Init ---------- */
 initializeOCR();
