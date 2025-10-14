@@ -63,6 +63,7 @@ async function startCamera() {
       // Some browsers might require user gesture; just log and proceed
     }
     overlay.style.display = 'flex';
+    captureButton.style.display = 'block';
     console.log('[Camera] Camera started and preview visible');
   } catch (error) {
     console.error('[Camera] Failed to start camera:', error);
@@ -161,9 +162,9 @@ async function captureAndScan() {
         html: `Receipt Data:${cleanedText}(OCR confidence: ${finalConf}%)`
       };
       result.innerHTML = `
-        Receipt recognised:<br/><br/>
+        Receipt recognised:
         <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
-        <br/><small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
+        <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
       `;
       console.log('[Capture] Preparing email to user...');
       // Prepare Rabbit R1-conform JSON envelope and send (to self)
