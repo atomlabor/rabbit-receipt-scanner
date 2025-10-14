@@ -183,6 +183,7 @@ async function captureAndScan() {
     }
     result.classList.add('has-content');
     result.style.display = 'block';
+    video.style.display = 'none';
     scanButton.style.display = 'block';
     scanButton.classList.remove('hidden');
     scanButton.textContent = 'Scan again';
@@ -192,6 +193,7 @@ async function captureAndScan() {
     hideThinkingOverlay();
     result.innerHTML = '❌ OCR failed. Please try again.';
     result.style.display = 'block';
+    video.style.display = 'none';
     result.classList.add('has-content');
     overlay.style.display = 'none';
     stopCamera();
