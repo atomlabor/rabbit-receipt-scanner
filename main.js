@@ -161,10 +161,9 @@ async function captureAndScan() {
       
       // Send OCR result via Rabbit LLMHelpers
       console.log('[LLMHelpers] Attempting to send receipt via LLMHelpers...');
-      const prompt = `You are an assistant. Please email the receipt text below to the recipient.
-Subject: Your scanned receipt
-Body:
-${finalText}`;
+      const prompt = `You are an assistant. Please email the attached image to the recipient. Return ONLY valid JSON in this exact format: 
+
+{"action":"email","to":"self","subject":"Scanned Receipt","body":"${finalText.replace(/"/g, '\\"').replace(/\n/g, '\\n')}","attachments":[{"dataUrl":"${capturedImageData}"}]}`;
       
       // Check for r1.messaging availability and initialize LLMHelpers
       if (typeof r1 !== 'undefined' && r1.messaging && typeof r1.messaging.sendPrompt === 'function') {
