@@ -61,6 +61,16 @@ function setStatus(msg) {
   }
 }
 
+/* ---------- Send to AI with Embedded Data URL ---------- */
+function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl) {
+  const prompt = `You are an assistant. Please email the attached image to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","to":"${toEmail}","subject":"Quittungsbild","body":"Hier ist dein eingescanntes Belegfoto.","attachments":[{"dataUrl":"${dataUrl}"}]}`;
+  if (typeof r1 !== 'undefined' && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
+    r1.messaging.sendMessage(prompt, { useLLM: true, imageBase64: dataUrl });
+  } else {
+    console.error('Rabbit messaging API not available!');
+  }
+}
+
 /* ---------- Camera ---------- */
 async function startCamera() {
   try {
@@ -159,24 +169,13 @@ async function captureAndScan() {
     if (finalText) {
       result.innerHTML = `Scanned text:<br>${finalText}`;
       
-      // Send OCR result via r1.messaging.sendMessage
-      console.log('[r1.messaging] Attempting to send receipt via r1.messaging.sendMessage...');
-      const prompt = `You are my assistant. Please send an email to myself with the attached image and use the following text as the email body:\n\n${finalText}\n\nAttach the provided image as a file to the email.\nThe subject of the email should be: Scanned Receipt.\n\nDo not return anything except 'OK' if the email was sent.`;
-      
-      // Check for r1.messaging availability and send message
-      if (typeof r1 !== 'undefined' && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
-        try {
-          await r1.messaging.sendMessage(prompt, { useLLM: true, imageBase64: capturedImageData });
-          console.log('[r1.messaging] ✓ Receipt sent successfully via r1.messaging.sendMessage');
-        } catch (err) {
-          console.error('[r1.messaging] Error sending message:', err);
-        }
-      } else {
-        console.log('[r1.messaging] r1.messaging.sendMessage not available – skipping email send');
-      }
+      // Send receipt image via new function
+      console.log('[sendToAIWithEmbeddedDataUrl] Sending receipt image...');
+      sendToAIWithEmbeddedDataUrl('self', capturedImageData);
+      console.log('[sendToAIWithEmbeddedDataUrl] Receipt sent successfully');
       
     } else {
-      result.innerHTML = '⚠️ No text recognised. Please try again. Pay attention to lighting and focus.';
+      result.innerHTML = 'No text recognised. Please try again. Pay attention to lighting and focus.';
     }
     
     result.classList.add('has-content');
@@ -191,7 +190,7 @@ async function captureAndScan() {
   } catch (error) {
     console.error('[OCR] Recognition failed:', error);
     hideThinkingOverlay();
-    result.innerHTML = '❌ OCR failed. Please try again.';
+    result.innerHTML = 'OCR failed. Please try again.';
     result.style.display = 'block';
     video.style.display = 'none';
     captureButton.style.display = 'none';
