@@ -181,7 +181,7 @@ async function captureAndScan() {
       result.innerHTML = `
         <div style="padding: 20px; background: white; border-radius: 8px;">
           Receipt recognised:
-          <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
+          <pre style="white-space: pre-wrap; word-break: break-word; color: #000; font-size: 14px;">${cleanedText}</pre>
           <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
         </div>
       `;
