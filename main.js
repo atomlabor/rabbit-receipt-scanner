@@ -149,8 +149,8 @@ async function captureAndScan() {
     
     console.log('[Capture] Capturing frame...');
     const context = canvas.getContext('2d');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth || 240;
+    canvas.height = video.videoHeight || 282;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     capturedImageData = canvas.toDataURL('image/jpeg', 0.9);
     console.log('[Capture] Image captured, data URL length:', capturedImageData.length);
@@ -175,13 +175,15 @@ async function captureAndScan() {
       const subject = 'Receipt scanned via Rabbit App';
       const bodyObj = {
         text: `Receipt Data:\n\n${cleanedText}\n\n(OCR confidence: ${finalConf}%)`,
-        html: `<p><strong>Receipt Data:</strong></p><pre>${cleanedText}</pre><p><small>(OCR confidence: ${finalConf}%)</small></p>`
+        html: `<pre style="white-space: pre-wrap; word-break: break-word;">Receipt Data:\n\n${cleanedText}\n\n(OCR confidence: ${finalConf}%)</pre>`
       };
       
       result.innerHTML = `
-        <p><strong>Receipt recognised:</strong></p>
-        <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
-        <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
+        <div style="padding: 20px; background: white; border-radius: 8px;">
+          <h3>Receipt recognised:</h3>
+          <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
+          <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
+        </div>
       `;
       
       console.log('[Capture] Preparing email to user...');
