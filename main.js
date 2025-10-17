@@ -111,12 +111,12 @@ async function initializeOCR() {
 /* ---------- Rabbit R1 API helper (JSON over Bluetooth) ---------- */
 // Modified function to send email via LLM with embedded data URL
 function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl, ocrText) {
-  const prompt = `You are Rabbit R1's assistant. Below is the text from a scanned receipt (OCR):
+  const prompt = `You are my assistant. Below is the text from a scanned receipt (OCR):
 === RECEIPT TEXT START ===
 ${ocrText}
 === RECEIPT TEXT END ===
 
-Send the content of this receipt by email to the recipient. 
+Send the content of this receipt to the recipient. 
 Return valid JSON with the following structure:
 {"action":"email","to":"${toEmail}","subject":"Your scanned receipt","body":"Here is your receipt info:\n${ocrText}","attachments":[{"dataUrl":"${dataUrl}"}]}
 Do not explain anything. Output only the JSON.`;
