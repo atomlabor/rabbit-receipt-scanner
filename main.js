@@ -5,6 +5,33 @@ let worker = null;
 let stream = null;
 let capturedImageData = null;
 
+// LLMHelpers class implementation (from SDK)
+class LLMHelpers {
+  constructor(messaging) {
+    if (!messaging || typeof messaging !== 'object') {
+      throw new Error('[LLMHelpers] Invalid messaging object');
+    }
+    this.messaging = messaging;
+  }
+
+  async performTask(prompt, waitForCompletion = true) {
+    try {
+      console.log('[LLMHelpers] Sending prompt to r1.messaging...');
+      await this.messaging.sendPrompt(prompt);
+      console.log('[LLMHelpers] ✓ Prompt sent successfully');
+      
+      if (waitForCompletion) {
+        console.log('[LLMHelpers] Waiting for task completion...');
+        await this.messaging.waitForCompletion();
+        console.log('[LLMHelpers] ✓ Task completed');
+      }
+    } catch (error) {
+      console.error('[LLMHelpers] Error performing task:', error);
+      throw error;
+    }
+  }
+}
+
 // DOM elements
 const scanButton = document.getElementById('scanButton');
 const captureButton = document.getElementById('captureButton');
@@ -119,7 +146,6 @@ async function captureAndScan() {
     stopCamera();
     overlay.style.display = 'none';
     captureButton.style.display = 'none';
-
     showThinkingOverlay();
     setStatus('Recognising text...');
 
@@ -131,24 +157,26 @@ async function captureAndScan() {
     const finalConf = confidence ? confidence.toFixed(2) : 'N/A';
 
     if (finalText) {
-      result.innerHTML = `<strong>Scanned text:</strong><br><pre>${finalText}</pre>`;
+      result.innerHTML = `Scanned text:<br>${finalText}`;
       
-      // Send OCR result via Rabbit LLM
-      console.log('[Rabbit-LLM] Attempting to send receipt via LLM...');
+      // Send OCR result via Rabbit LLMHelpers
+      console.log('[LLMHelpers] Attempting to send receipt via LLMHelpers...');
       const prompt = `You are an assistant. Please email the receipt text below to the recipient.
 Subject: Your scanned receipt
 Body:
 ${finalText}`;
       
-      if (typeof rabbit !== 'undefined' && rabbit.llm && typeof rabbit.llm.send === 'function') {
+      // Check for r1.messaging availability and initialize LLMHelpers
+      if (typeof r1 !== 'undefined' && r1.messaging && typeof r1.messaging.sendPrompt === 'function') {
         try {
-          rabbit.llm.send(prompt);
-          console.log('[Rabbit-LLM] ✓ Prompt sent to Rabbit LLM interface');
+          const llmHelpers = new LLMHelpers(r1.messaging);
+          await llmHelpers.performTask(prompt, false);
+          console.log('[LLMHelpers] ✓ Receipt prompt sent successfully via LLMHelpers');
         } catch (err) {
-          console.error('[Rabbit-LLM] Error sending prompt:', err);
+          console.error('[LLMHelpers] Error sending prompt:', err);
         }
       } else {
-        console.log('[Rabbit-LLM] Rabbit LLM interface not available – skipping email send');
+        console.log('[LLMHelpers] r1.messaging not available – skipping email send');
       }
       
     } else {
