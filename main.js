@@ -119,7 +119,7 @@ async function initializeOCR() {
 /* ---------- Rabbit R1 API helper (JSON over Bluetooth) ---------- */
 // Modified function to send email via LLM with embedded data URL
 function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl) {
-  const prompt = `You are my assistant. Please analyse the image for me and then send the result, the text in the image, by email to the recipient. Return ONLY valid JSON in this exact format: {"action":"email","to":"${toEmail}","subject":"your scan","body":"Here is your receipt info:","attachments":[{"dataUrl":"<dataurl>"}]}`;
+  const prompt = `You are my assistant. Please analyse the image for me and then send the result, the text in the image, by email to the recipient. Send the OCR. Return valid JSON in this exact format: {"action":"email","to":"${toEmail}","subject":"your scan","body":"Here is your receipt info:","attachments":[{"dataUrl":"<dataurl>"}]}`;
   
   const payload = {
     useLLM: true,
@@ -139,40 +139,7 @@ function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl) {
   }
 }
 
-/**
- * NEW FEATURE: Analyse receipt image with LLM
- * Sends image directly to Rabbit R1 LLM backend for structured JSON extraction
- * @param {string} imageDataUrl - Base64 encoded image data URL
- */
-function analyseReceiptImageWithLLM(imageDataUrl) {
-  const prompt = `du bist mein Assistent, analysiere das angehängte Bild und sende mir eine E-Mail mit einer JSON mit diesen Feldern: { "products": [ { "name": "...", "price": ... } ], "total": ..., "date": "...", "vendor": "..." }. Return ONLY valid JSON. No extra text.`;
-  
-  const payload = {
-    useLLM: true,
-    message: prompt,
-    imageDataUrl: imageDataUrl
-  };
-  
-  console.log('[LLM-Analysis] Sending receipt image to LLM for structured analysis:', payload);
-  
-  try {
-    PluginMessageHandler.postMessage(JSON.stringify(payload));
-    console.log('[LLM-Analysis] Message posted successfully to Rabbit R1 LLM backend');
-    return true;
-  } catch (error) {
-    console.error('[LLM-Analysis] Failed to post message:', error);
-    return false;
-  }
-}
 
-/**
- * Build a Rabbit-conform JSON envelope.
- * @param {string} toEmail – to field (or 'self')
- * @param {string} subject – email subject
- * @param {object} bodyObj – { text, html }
- * @param {string|null} dataUrl – Base64 image data URL
- * @returns {object} – { to, subject, body, attachments }
- */
 function buildEnvelope(toEmail, subject, bodyObj, dataUrl) {
   return {
     to: toEmail || 'self',
