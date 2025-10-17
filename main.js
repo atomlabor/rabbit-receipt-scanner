@@ -4,7 +4,6 @@ const { createWorker } = Tesseract;
 let worker = null;
 let stream = null;
 let capturedImageData = null;
-
 // DOM elements
 const scanButton = document.getElementById('scanButton');
 const captureButton = document.getElementById('captureButton');
@@ -14,16 +13,13 @@ const overlay = document.getElementById('overlay');
 const thinkingOverlay = document.getElementById('thinking-overlay');
 const statusText = document.getElementById('status-text');
 const result = document.getElementById('result');
-
 /* ---------- UI helpers ---------- */
 function showThinkingOverlay() {
   thinkingOverlay.style.display = 'flex';
 }
-
 function hideThinkingOverlay() {
   thinkingOverlay.style.display = 'none';
 }
-
 /* ---------- Status helper ---------- */
 function setStatus(msg) {
   try {
@@ -33,7 +29,6 @@ function setStatus(msg) {
     console.log('[Status:fallback]', msg);
   }
 }
-
 /* ---------- Camera ---------- */
 async function startCamera() {
   try {
@@ -82,7 +77,6 @@ async function startCamera() {
     scanButton.style.display = 'block';
   }
 }
-
 function stopCamera() {
   if (stream) {
     stream.getTracks().forEach(track => {
@@ -101,13 +95,12 @@ function stopCamera() {
   overlay.style.display = 'none';
   console.log('[Camera] Camera stopped and overlay hidden');
 }
-
 /* ---------- OCR ---------- */
 async function initializeOCR() {
   try {
     setStatus('Preparing OCR engine...');
     console.log('[OCR] Creating worker...');
-    worker = await createWorker('eng');
+    worker = await createWorker('deu+eng');
     console.log('[OCR] Worker ready');
     setStatus('Ready to scan receipts');
   } catch (error) {
@@ -115,11 +108,10 @@ async function initializeOCR() {
     setStatus('OCR initialization failed');
   }
 }
-
 /* ---------- Rabbit R1 API helper (JSON over Bluetooth) ---------- */
 // Modified function to send email via LLM with embedded data URL
 function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl) {
-  const prompt = `You are my assistant. Please analyse the image for me and then send the result, the text in the image, by email to the recipient. Send the OCR. Return valid JSON in this exact format: {"action":"email","to":"${toEmail}","subject":"your scan","body":"Here is your receipt info:","attachments":[{"dataUrl":"<dataurl>"}]}`;
+  const prompt = `You are my assistant. Please analyse the image for me and then send the result, the text in the image, by email to the recipient. Send the OCR. Return valid JSON in this exact format: {"action":"email","to":"${toEmail}","subject":"your scan","body":"Here is your receipt info:","attachments":[{"dataUrl":"${dataUrl}"}]}`;
   
   const payload = {
     useLLM: true,
@@ -138,8 +130,6 @@ function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl) {
     return false;
   }
 }
-
-
 function buildEnvelope(toEmail, subject, bodyObj, dataUrl) {
   return {
     to: toEmail || 'self',
@@ -148,7 +138,6 @@ function buildEnvelope(toEmail, subject, bodyObj, dataUrl) {
     attachments: dataUrl ? [{ filename: '', contentType: 'image/jpeg', dataUrl }] : []
   };
 }
-
 /* ---------- Capture & OCR ---------- */
 async function captureAndScan() {
   try {
@@ -186,11 +175,11 @@ async function captureAndScan() {
       const subject = 'Receipt scanned via Rabbit App';
       const bodyObj = {
         text: `Receipt Data:\n\n${cleanedText}\n\n(OCR confidence: ${finalConf}%)`,
-        html: `<p>Receipt Data:</p><pre>${cleanedText}</pre><p>(OCR confidence: ${finalConf}%)</p>`
+        html: `<p><strong>Receipt Data:</strong></p><pre>${cleanedText}</pre><p><small>(OCR confidence: ${finalConf}%)</small></p>`
       };
       
       result.innerHTML = `
-        <p>Receipt recognised:</p>
+        <p><strong>Receipt recognised:</strong></p>
         <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
         <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
       `;
@@ -248,7 +237,6 @@ async function captureAndScan() {
     scanButton.classList.remove('hidden');
   }
 }
-
 /* ---------- Events ---------- */
 scanButton.addEventListener('click', () => {
   result.innerHTML = '';
@@ -259,15 +247,12 @@ scanButton.addEventListener('click', () => {
   stopCamera(); // Stop existing camera stream first
   startCamera(); // Then start fresh camera preview
 });
-
 document.addEventListener('visibilitychange', () => {
   // If the tab becomes hidden, release camera to avoid OS-level locking
   if (document.hidden) {
     stopCamera();
   }
 });
-
 captureButton.addEventListener('click', captureAndScan);
-
 /* ---------- Init ---------- */
 initializeOCR();
