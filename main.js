@@ -180,7 +180,7 @@ async function captureAndScan() {
       
       result.innerHTML = `
         <div style="padding: 20px; background: white; border-radius: 8px;">
-          <h3>Receipt recognised:</h3>
+          Receipt recognised:
           <pre style="white-space: pre-wrap; word-break: break-word;">${cleanedText}</pre>
           <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
         </div>
@@ -204,12 +204,15 @@ async function captureAndScan() {
       
       // NEW: Also trigger LLM-based receipt analysis
       console.log('[LLM-Analysis] Triggering structured receipt analysis...');
-      const analysisTriggered = analyseReceiptImageWithLLM(capturedImageData);
-      
-      if (analysisTriggered) {
-        console.log('[LLM-Analysis] ✓ Receipt analysis task dispatched to LLM');
+      if (typeof analyseReceiptImageWithLLM === 'function') {
+        const analysisTriggered = analyseReceiptImageWithLLM(capturedImageData);
+        if (analysisTriggered) {
+          console.log('[LLM-Analysis] ✓ Receipt analysis task dispatched to LLM');
+        } else {
+          console.log('[LLM-Analysis] Failed to trigger analysis');
+        }
       } else {
-        console.log('[LLM-Analysis] Failed to trigger analysis');
+        console.log('[LLM] Kein analyseReceiptImageWithLLM verfügbar – Analyse-Schritt entfällt.');
       }
       
     } else {
