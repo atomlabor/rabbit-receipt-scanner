@@ -4,6 +4,7 @@ const { createWorker } = Tesseract;
 let worker = null;
 let stream = null;
 let capturedImageData = null;
+
 // DOM elements
 const scanButton = document.getElementById('scanButton');
 const captureButton = document.getElementById('captureButton');
@@ -13,13 +14,16 @@ const overlay = document.getElementById('overlay');
 const thinkingOverlay = document.getElementById('thinking-overlay');
 const statusText = document.getElementById('status-text');
 const result = document.getElementById('result');
+
 /* ---------- UI helpers ---------- */
 function showThinkingOverlay() {
   thinkingOverlay.style.display = 'flex';
 }
+
 function hideThinkingOverlay() {
   thinkingOverlay.style.display = 'none';
 }
+
 /* ---------- Status helper ---------- */
 function setStatus(msg) {
   try {
@@ -29,6 +33,7 @@ function setStatus(msg) {
     console.log('[Status:fallback]', msg);
   }
 }
+
 /* ---------- Camera ---------- */
 async function startCamera() {
   try {
@@ -56,171 +61,94 @@ async function startCamera() {
     
     // Defensive camera initialization
     video.srcObject = stream;
+    await video.play();
     
-    // Explicitly play the video - critical for preview to appear
-    try {
-      video.style.display = 'block';
-      await video.play();
-      video.style.display = 'block';
-      console.log('[Camera] Video playback started');
-    } catch (playErr) {
-      console.warn('[Camera] video.play() threw:', playErr);
-      // Some browsers might require user gesture; just log and proceed
-    }
-    
-    overlay.style.display = 'flex';
+    video.style.display = 'block';
+    overlay.style.display = 'block';
     captureButton.style.display = 'block';
-    console.log('[Camera] Camera started and preview visible');
+    setStatus('Camera ready – frame the receipt');
+    console.log('[Camera] Started successfully');
   } catch (error) {
-    console.error('[Camera] Failed to start camera:', error);
-    alert('Camera access denied or unavailable. Please check your permissions.');
-    scanButton.style.display = 'block';
+    console.error('[Camera] Error:', error);
+    alert('Camera access denied or unavailable.');
   }
 }
+
 function stopCamera() {
-  if (stream) {
-    stream.getTracks().forEach(track => {
-      try {
-        track.stop();
-        console.log('[Camera] Track stopped:', track.label);
-      } catch (e) {
-        console.warn('[Camera] Error stopping track:', e);
-      }
-    });
-    stream = null;
+  try {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      stream = null;
+    }
+    if (video && video.srcObject) {
+      video.srcObject.getTracks().forEach(track => track.stop());
+      video.srcObject = null;
+    }
+    console.log('[Camera] Stopped');
+  } catch (error) {
+    console.error('[Camera] Error stopping camera:', error);
   }
-  if (video) {
-    video.srcObject = null;
-  }
-  overlay.style.display = 'none';
-  console.log('[Camera] Camera stopped and overlay hidden');
 }
+
 /* ---------- OCR ---------- */
 async function initializeOCR() {
   try {
-    setStatus('Preparing OCR engine...');
-    console.log('[OCR] Creating worker...');
-    worker = await createWorker('deu+eng');
-    console.log('[OCR] Worker ready');
-    setStatus('Ready to scan receipts');
+    setStatus('Loading OCR engine...');
+    worker = await createWorker('eng');
+    console.log('[OCR] Tesseract worker ready');
   } catch (error) {
     console.error('[OCR] Initialization failed:', error);
-    setStatus('OCR initialization failed');
+    alert('OCR engine failed to load. Please reload the page.');
   }
 }
-/* ---------- Rabbit R1 API helper (JSON over Bluetooth) ---------- */
-// Modified function to send email via LLM with embedded data URL
-function sendToAIWithEmbeddedDataUrl(toEmail, dataUrl, ocrText) {
-  const prompt = `You are my assistant. Below is the text from a scanned receipt (OCR):
-=== RECEIPT TEXT START ===
-${ocrText}
-=== RECEIPT TEXT END ===
 
-Send the content of this receipt to the recipient. 
-Return valid JSON with the following structure:
-{"action":"email","to":"${toEmail}","subject":"Your scanned receipt","body":"Here is your receipt info:\n${ocrText}","attachments":[{"dataUrl":"${dataUrl}"}]}
-Do not explain anything. Output only the JSON.`;
-  
-  const payload = {
-    useLLM: true,
-    message: prompt,
-    imageDataUrl: dataUrl
-  };
-  
-  console.log('[AI] Sending payload to PluginMessageHandler:', payload);
-  
-  try {
-    PluginMessageHandler.postMessage(JSON.stringify(payload));
-    console.log('[AI] Message posted successfully');
-    return true;
-  } catch (error) {
-    console.error('[AI] Failed to post message:', error);
-    return false;
-  }
-}
-function buildEnvelope(toEmail, subject, bodyObj, dataUrl) {
-  return {
-    to: toEmail || 'self',
-    subject,
-    body: bodyObj,
-    attachments: dataUrl ? [{ filename: '', contentType: 'image/jpeg', dataUrl }] : []
-  };
-}
-/* ---------- Capture & OCR ---------- */
 async function captureAndScan() {
+  if (!worker) {
+    alert('OCR engine not ready yet. Please wait.');
+    return;
+  }
+
   try {
-    if (!stream || !video.srcObject) {
-      console.warn('[Capture] No active camera stream');
-      alert('No camera active. Please start scanning first.');
-      return;
-    }
-    
-    console.log('[Capture] Capturing frame...');
-    const context = canvas.getContext('2d');
-    canvas.width = video.videoWidth || 240;
-    canvas.height = video.videoHeight || 282;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    capturedImageData = canvas.toDataURL('image/jpeg', 0.9);
-    console.log('[Capture] Image captured, data URL length:', capturedImageData.length);
-    
+    console.log('[Capture] Taking snapshot...');
+    const ctx = canvas.getContext('2d');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    capturedImageData = canvas.toDataURL('image/png');
+
     stopCamera();
-    
-    // Show thinking overlay
+    overlay.style.display = 'none';
+    captureButton.style.display = 'none';
+
     showThinkingOverlay();
     setStatus('Recognising text...');
-    
+
     console.log('[OCR] Starting recognition...');
-    const { data: { text, confidence } } = await worker.recognize(canvas);
-    const finalConf = (confidence || 0).toFixed(1);
-    console.log('[OCR] Recognition complete:', { textLength: text.length, confidence: finalConf });
-    
+    const { data: { text, confidence } } = await worker.recognize(capturedImageData);
     hideThinkingOverlay();
-    
-    const cleanedText = (text || '').trim();
-    
-    if (cleanedText.length > 0) {
-      // Build structured body (plaintext + HTML)
-      const subject = 'Receipt scanned via Rabbit App';
-      const bodyObj = {
-        text: `Receipt Data:\n\n${cleanedText}\n\n(OCR confidence: ${finalConf}%)`,
-        html: `<pre style="white-space: pre-wrap; word-break: break-word;">Receipt Data:\n\n${cleanedText}\n\n(OCR confidence: ${finalConf}%)</pre>`
-      };
+
+    const finalText = text ? text.trim() : '';
+    const finalConf = confidence ? confidence.toFixed(2) : 'N/A';
+
+    if (finalText) {
+      result.innerHTML = `<strong>Scanned text:</strong><br><pre>${finalText}</pre>`;
       
-      result.innerHTML = `
-        <div style="padding: 20px; background: white; border-radius: 8px;">
-          Receipt recognised:
-          <pre style="white-space: pre-wrap; word-break: break-word; color: #000; font-size: 14px;">${cleanedText}</pre>
-          <small style="color: #999;">(OCR confidence: ${finalConf}%)</small>
-        </div>
-      `;
+      // Send OCR result via Rabbit LLM
+      console.log('[Rabbit-LLM] Attempting to send receipt via LLM...');
+      const prompt = `You are an assistant. Please email the receipt text below to the recipient.
+Subject: Your scanned receipt
+Body:
+${finalText}`;
       
-      console.log('[Capture] Preparing email to user...');
-      
-      // Get recipient email and send via LLM
-      const toEmailInput = document.getElementById('emailInput');
-      const toRaw = (toEmailInput?.value || '').trim();
-      const toEmail = toRaw || 'self';
-      
-      console.log('[AI] Dispatching email via LLM with embedded data URL');
-      const sent = sendToAIWithEmbeddedDataUrl(toEmail, capturedImageData, cleanedText);
-      
-      if (!sent) {
-        console.log('[AI] Failed to send message');
-      }
-      
-      console.log('[Capture] ✓ AI email task dispatched');
-      
-      // NEW: Also trigger LLM-based receipt analysis
-      console.log('[LLM-Analysis] Triggering structured receipt analysis...');
-      if (typeof analyseReceiptImageWithLLM === 'function') {
-        const analysisTriggered = analyseReceiptImageWithLLM(capturedImageData);
-        if (analysisTriggered) {
-          console.log('[LLM-Analysis] ✓ Receipt analysis task dispatched to LLM');
-        } else {
-          console.log('[LLM-Analysis] Failed to trigger analysis');
+      if (typeof rabbit !== 'undefined' && rabbit.llm && typeof rabbit.llm.send === 'function') {
+        try {
+          rabbit.llm.send(prompt);
+          console.log('[Rabbit-LLM] ✓ Prompt sent to Rabbit LLM interface');
+        } catch (err) {
+          console.error('[Rabbit-LLM] Error sending prompt:', err);
         }
       } else {
-        console.log('[LLM] Kein analyseReceiptImageWithLLM verfügbar – Analyse-Schritt entfällt.');
+        console.log('[Rabbit-LLM] Rabbit LLM interface not available – skipping email send');
       }
       
     } else {
@@ -250,6 +178,7 @@ async function captureAndScan() {
     scanButton.classList.remove('hidden');
   }
 }
+
 /* ---------- Events ---------- */
 scanButton.addEventListener('click', () => {
   result.innerHTML = '';
@@ -260,12 +189,15 @@ scanButton.addEventListener('click', () => {
   stopCamera(); // Stop existing camera stream first
   startCamera(); // Then start fresh camera preview
 });
+
 document.addEventListener('visibilitychange', () => {
   // If the tab becomes hidden, release camera to avoid OS-level locking
   if (document.hidden) {
     stopCamera();
   }
 });
+
 captureButton.addEventListener('click', captureAndScan);
+
 /* ---------- Init ---------- */
 initializeOCR();
