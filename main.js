@@ -159,23 +159,20 @@ async function captureAndScan() {
     if (finalText) {
       result.innerHTML = `Scanned text:<br>${finalText}`;
       
-      // Send OCR result via Rabbit LLMHelpers
-      console.log('[LLMHelpers] Attempting to send receipt via LLMHelpers...');
-      const prompt = `You are an assistant. Please email the attached image to the recipient. Return valid JSON in this exact format: 
-
-{"action":"email","to":"self","subject":"Scanned Receipt","body":"${finalText.replace(/"/g, '\\"').replace(/\n/g, '\\n')}","attachments":[{"dataUrl":"${capturedImageData}"}]}`;
+      // Send OCR result via r1.messaging.sendMessage
+      console.log('[r1.messaging] Attempting to send receipt via r1.messaging.sendMessage...');
+      const prompt = `You are my assistant. Please send an email to myself with the attached image and use the following text as the email body:\n\n${finalText}\n\nAttach the provided image as a file to the email.\nThe subject of the email should be: Scanned Receipt.\n\nDo not return anything except 'OK' if the email was sent.`;
       
-      // Check for r1.messaging availability and initialize LLMHelpers
-      if (typeof r1 !== 'undefined' && r1.messaging && typeof r1.messaging.sendPrompt === 'function') {
+      // Check for r1.messaging availability and send message
+      if (typeof r1 !== 'undefined' && r1.messaging && typeof r1.messaging.sendMessage === 'function') {
         try {
-          const llmHelpers = new LLMHelpers(r1.messaging);
-          await llmHelpers.performTask(prompt, false);
-          console.log('[LLMHelpers] ✓ Receipt prompt sent successfully via LLMHelpers');
+          await r1.messaging.sendMessage(prompt, { useLLM: true, imageBase64: capturedImageData });
+          console.log('[r1.messaging] ✓ Receipt sent successfully via r1.messaging.sendMessage');
         } catch (err) {
-          console.error('[LLMHelpers] Error sending prompt:', err);
+          console.error('[r1.messaging] Error sending message:', err);
         }
       } else {
-        console.log('[LLMHelpers] r1.messaging not available – skipping email send');
+        console.log('[r1.messaging] r1.messaging.sendMessage not available – skipping email send');
       }
       
     } else {
